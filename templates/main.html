@@ -1,0 +1,76 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<h1>
+    HELLO! {{ username }}
+</h1>
+<h3>
+    NOW IS {{ now }}
+</h3>
+
+<form action="{{url_for('main')}}" method="POST">
+   <div class="form-group">
+        <label for="inputName">Name of subreddit</label>
+        <input type="text" class="form-control" id="inputName" name="subreddit_name" placeholder="video">
+    </div>
+    <button type="submit" class="btn btn-default">Retrieve</button>
+</form>
+
+{% block content %}
+
+<div class="content">
+    {% if result %}
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>
+                FullName
+            </th>
+            <th>
+                UPs
+            </th>
+             <th>
+                 Title
+             </th>
+            <th>
+                Link
+            </th>
+            <th>
+                Search by this url
+            </th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for el in result %}
+        <tr>
+            <th>
+                {{el['fullname'] }}
+            </th>
+            <th>
+                {{el['ups']}}
+            </th>
+            <th>
+                {{el['title']}}
+            </th>
+            <th>
+                <a href="{{el['permalink']}}" class="btn btn-warning">
+                GO TO
+            </a>
+            </th>
+            <th>
+                 <a href="{{url_for('search', q=el['url_encoded'])}}" class="btn btn-default">
+                SEARCH!
+            </a>
+            </th>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    Results will be here...
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% endblock %}
