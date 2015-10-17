@@ -6,7 +6,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from datetime import datetime
 from uuid import uuid4
 from werkzeug.utils import redirect
-from reddit import search_url, get_new
+from engine import reddit_search_url, reddit_get_new
 
 __author__ = '4ikist'
 
@@ -136,7 +136,7 @@ def main():
     user = g.user
     if request.method == "POST":
         subrdt = request.form.get("subreddit_name")
-        result = get_new(subrdt)
+        result = reddit_get_new(subrdt)
         return render_template("main.html", **{"now": datetime.now(),
                                                "username": user.name,
                                                "result": result})
@@ -148,7 +148,7 @@ def main():
 @app.route("/search/<q>")
 @login_required
 def search(q):
-    result = search_url(q)
+    result = reddit_search_url(q)
     return render_template("search.html", **{"result": result})
 
 
