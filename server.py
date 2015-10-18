@@ -5,28 +5,34 @@ from flask_debugtoolbar import DebugToolbarExtension
 
 from datetime import datetime
 from uuid import uuid4
+from multiprocessing import Queue
 from werkzeug.utils import redirect
-from engine import reddit_search_url, reddit_get_new
+from db import DBHandler
+
+from processes import SubredditProcessWorker, WorkNotifier
+import properties
 
 __author__ = '4ikist'
 
 app = Flask("rr")
 
-
 app.secret_key = 'fooooooo'
 app.config['SESSION_TYPE'] = 'filesystem'
 
-# app.config["SECRET_KEY"] = "foooo"
-# app.debug = True
-# toolbar = DebugToolbarExtension(app)
+app.config["SECRET_KEY"] = "foooo"
 
-
+app.debug = True
+app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
+toolbar = DebugToolbarExtension(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 log = logging.getLogger("web")
+
+db = DBHandler()
+
 
 
 class User(object):
@@ -51,21 +57,36 @@ class User(object):
         return self.id
 
 
+auth_id_f = lambda user: hash("%s%s" % (user.name, user.pwd))
+auth_id_fpn = lambda name, pwd: hash("%s%s" % (name, pwd))
+
+
 class UsersHandler(object):
     def __init__(self):
         self.users = {}
         self.auth_users = {}
 
     def get_by_id(self, id):
-        return self.users.get(id)
+        found = self.users.get(id)
+        if not found:
+            found = db.users.find_one({"user_id": id})
+            if found:
+                user = User(found.get('name'), found.get("pwd"))
+                user.id = found.get("user_id")
+                self.users[user.id] = user
+                found = user
+        return found
 
     def auth_user(self, name, pwd):
-        id = hash("%s%s" % (name, pwd))
-        authed = self.auth_users.get(id)
+        authed = db.check_user(name, pwd)
         if authed:
-            user = self.users.get(authed)
+            user = self.get_by_id(authed)
+            if not user:
+                user = User(name, pwd)
+                user.id = authed
             user.auth = True
             user.active = True
+            self.users[user.id] = user
             return user
 
     def logout(self, user):
@@ -75,12 +96,11 @@ class UsersHandler(object):
 
     def add_user(self, user):
         self.users[user.id] = user
-        auth_id = hash("%s%s" % (user.name, user.pwd))
-        self.auth_users[auth_id] = user.id
+        db.add_user(user.name, user.pwd, user.id)
 
 
 usersHandler = UsersHandler()
-usersHandler.add_user(User("3030", "100500"))
+usersHandler.add_user(User("3030", "1"))
 
 
 @app.before_request
@@ -130,27 +150,78 @@ def logout():
     return redirect(url_for('login'))
 
 
-@app.route("/", methods=["POST", "GET"])
+rq = Queue()
+tq = Queue()
+db_hndlr = DBHandler()
+
+wrkr = SubredditProcessWorker(tq, rq, db_hndlr)
+wrkr.daemon = True
+wrkr.start()
+
+
+@app.route("/subreddit/add", methods=['POST'])
+@login_required
+def add_subreddit():
+    name = request.form.get("name") or "funny"
+    step = int(request.form.get('step'), 0) or None
+    params = {}
+    params['rate_min'] = int(request.form.get("rate_min") or 0)
+    params['rate_max'] = int(request.form.get("rate_max") or 99999)
+    params['reposts_max'] = int(request.form.get("reposts_max") or 10)
+    params['shift'] = int(request.form.get("shift") or 0)
+    params['time_min'] = request.form.get("time_min") or properties.default_time_min
+
+    db.add_subreddit(name, params, step)
+    try:
+        tq.put({"name": name})
+    except Exception as e:
+        log.exception(e)
+
+    return redirect(url_for('main'))
+
+
+@app.route("/subreddit/add_to_queue/<name>", methods=["GET"])
+@login_required
+def add_to_queue(name):
+    tq.put({"name": name})
+    return redirect(url_for('main'))
+
+
+@app.route("/subreddit/del", methods=["POST"])
+@login_required
+def del_subreddit():
+    name = request.form.get("name")
+    db.subreddits.delete_one({'name': name})
+    db.restart_statistic_cache()
+    return redirect(url_for('main'))
+
+
+@app.route("/subbredit/info/<name>", methods=["GET"])
+@login_required
+def info_subreddit(name):
+    user = g.user
+    posts = db.get_posts_of_subreddit(name)
+    sbrdt_info = db.get_subreddists_statistic()[name]
+    return render_template("subbredit_info.html", **{"now": datetime.now(),
+                                                     "username": user.name,
+                                                     "posts": posts,
+                                                     "sbrdt_info": sbrdt_info})
+
+
+@app.route("/", methods=["GET"])
 @login_required
 def main():
     user = g.user
-    if request.method == "POST":
-        subrdt = request.form.get("subreddit_name")
-        result = reddit_get_new(subrdt)
-        return render_template("main.html", **{"now": datetime.now(),
-                                               "username": user.name,
-                                               "result": result})
-    else:
-        return render_template("main.html", **{"now":datetime.now(),
-                                               "username":user.name,
-                                               "result":[]})
+    result = db.get_subreddists_statistic()
 
-@app.route("/search/<q>")
-@login_required
-def search(q):
-    result = reddit_search_url(q)
-    return render_template("search.html", **{"result": result})
+    return render_template("main.html", **{"now": datetime.now(),
+                                           "username": user.name,
+                                           "result": result})
 
+
+workNotifier = WorkNotifier(tq,db)
+workNotifier.daemon = True
+workNotifier.start()
 
 if __name__ == '__main__':
     app.run(port=5000)

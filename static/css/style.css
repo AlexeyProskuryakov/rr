@@ -1,0 +1,23 @@
+
+    body {
+      font-family: "Ubuntu", "Trebuchet MS", sans-serif;
+    }
+
+    th[data-sort]{
+      cursor:pointer;
+    }
+    /* just some random additional styles for a more real-world situation */
+    #msg {
+      color: #0a0;
+      text-align: center;
+    }
+    /* zebra-striping seems to really slow down Opera sometimes */
+    tr:nth-child(even) > td {
+      background-color: #f9f9f7;
+    }
+    tr:nth-child(odd) > td {
+      background-color: #ffffff;
+    }
+    .disabled {
+      opacity: 0.5;
+    }

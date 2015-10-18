@@ -1,0 +1,235 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<h1>
+    HELLO! {{ username }}
+</h1>
+<h3>
+    NOW IS {{ now }}
+</h3>
+
+
+{% block content %}
+
+<a href="{{url_for('main')}}">Back to main</a>
+<h1> [{{sbrdt_info['name']}}] info:</h1>
+<hr>
+<table class="table table-striped">
+    <thead>
+    <tr>
+        <th>
+            Name
+        </th>
+        <th>
+            Current statistics
+        </th>
+        <th>
+            Next time retrieve
+        </th>
+        <th>
+            Count retrieved
+        </th>
+
+        <th>
+            Time window in retrieved
+        </th>
+    </tr>
+    </thead>
+    <tbody>
+
+    <tr>
+        <th>
+            {{sbrdt_info['name'] }}
+        </th>
+        <th>
+            {{sbrdt_info['statistics']}}
+        </th>
+        <th>
+            {{sbrdt_info['next_time_retrieve']}}
+        </th>
+        <th>
+            {{sbrdt_info['count']}}
+        </th>
+        <th>
+            {{sbrdt_info['time_window']}}
+        </th>
+
+        <th>
+            <button type="button" class="btn btn-info" data-toggle="modal"
+                    data-target="#{{ sbrdt_info['name'] }}Modal">CHANGE PARAMS
+            </button>
+            <!-- Modal -->
+            <div class="modal fade" id="{{sbrdt_info['name']}}Modal" role="dialog">
+                <div class="modal-dialog">
+                    <!-- Modal content-->
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                            <h1>FUCKING FORM!</h1>
+                        </div>
+                        <div class="modal-body">
+
+
+                            <form action="{{url_for('add_subreddit')}}" method="POST">
+                                <div class="form-group">
+                                    <label for="{{ sbrdt_info['name'] }}_name">NAME BLYA!</label>
+                                    <input id="{{ sbrdt_info['name'] }}_name" name="name" value="{{sbrdt_info['name']}}"
+                                           type="text"
+                                           class="form-control"
+                                           placeholder="funny">
+                                    <label for="{{ sbrdt_info['name'] }}_step">КОЛ-ВО СЕКУНД ЧЕРЕЗ КОТОРЫЕ НАЧНЕТСЯ
+                                        СЛЕДУЮЩИЙ СБОР</label>
+                                    <input id="{{ sbrdt_info['name'] }}_step" name="step" value="{{sbrdt_info['step']}}"
+                                           type="text"
+                                           class="form-control"
+                                           placeholder="36000">
+                                </div>
+                                <div class="form-group">
+                                    <label for="{{ sbrdt_info['name'] }}_rate_min">MIN RATE BLYA!</label>
+                                    <input id="{{ sbrdt_info['name'] }}_rate_min" name="rate_min"
+                                           value="{{sbrdt_info['rate_min']}}"
+                                           type="text"
+                                           class="form-control"
+                                           placeholder="0">
+
+                                    <label for="{{ sbrdt_info['name'] }}_rate_max">MAX RATE BLYA!</label>
+                                    <input id="{{ sbrdt_info['name'] }}_rate_max" name="rate_max" type="text"
+                                           class="form-control"
+                                           placeholder="99999"
+                                           value="{{ sbrdt_info['rate_max'] }}"
+                                            >
+
+                                    <label for="{{ sbrdt_info['name'] }}_reposts_max">MAX REPOSTS BLYA!</label>
+                                    <input id="{{ sbrdt_info['name'] }}_reposts_max" name="reposts_max" type="text"
+                                           class="form-control"
+                                           value="{{ sbrdt_info['reposts_max'] }}"
+                                           placeholder="100">
+
+                                    <label for="{{ sbrdt_info['name'] }}_shift">SHIFT BLYA SKOKA SEKUND IDUT
+                                        LESOM!</label>
+                                    <input id="{{ sbrdt_info['name'] }}_shift" name="shift" type="text"
+                                           class="form-control"
+                                           placeholder="3600"
+                                           value="{{ sbrdt_info['shift'] }}">
+
+                                    <label for="{{ sbrdt_info['name'] }}_time_min">TIME MIN BLYA! SHABLON -
+                                        XYEBLON</label>
+                                    <input id="{{ sbrdt_info['name'] }}_time_min" name="time_min" type="text"
+                                           class="form-control"
+                                           value="{{sbrdt_info['time_min']}}"
+                                           placeholder="PT0H1M30S">
+
+                                </div>
+                                <button type="submit" class="btn btn-default">EBASH!</button>
+                            </form>
+
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">NAX...</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </th>
+        <th>
+            <a href="{{url_for('add_to_queue', name=sbrdt_info['name'])}}" class="btn btn-danger">
+                RESTAART!
+            </a>
+        </th>
+        <th>
+            <button type="button" class="btn btn-warning" data-toggle="modal"
+                    data-target="#{{ sbrdt_info['name'] }}ModalDel">ЗЖЕЧЬ НАХ
+            </button>
+            <!-- Modal -->
+            <div class="modal fade" id="{{sbrdt_info['name']}}ModalDel" role="dialog">
+                <div class="modal-dialog">
+                    <!-- Modal content-->
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                            <h1>Are you sure???</h1>
+                        </div>
+                        <div class="modal-body">
+                            <form action="{{ url_for('del_subreddit') }}" method="POST">
+                                <input type="hidden" name="name" value="{{ sbrdt_info['name'] }}">
+                                <button type="submit" class="btn btn-danger">YES!</button>
+                            </form>
+
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-primary" data-dismiss="modal">NEEEEET!...</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </th>
+
+    </tr>
+
+    </tbody>
+</table>
+<hr>
+<h1>
+    And here is our interested posts...
+</h1>
+<table id="table" class="table table-striped">
+    <thead>
+    <tr>
+        <th>
+            id
+        </th>
+        <th>
+            title
+        </th>
+        <th data-sort="int">
+            created dt
+        </th>
+        <th data-sort="int">
+            ups
+        </th>
+        <th data-sort="int">
+            reposts count
+        </th>
+        <th data-sort="string">
+            post id (fullname)
+        </th>
+    </tr>
+    </thead>
+    <tbody>
+
+    {% for post in posts%}
+
+    <tr>
+        <th>
+            <a href="{{post['video_url']}}"> {{ post['video_id'] }}</a>
+        </th>
+        <th>
+            <a href="{{post['reddit_url']}}">{{ post['title'] }}</a>
+        </th>
+        <th data-sort-value="{{post['created_utc']}}">
+            {{post['created_dt']}}
+        </th>
+        <th data-sort-value="{{post['ups']}}">
+            {{post['ups']}}
+        </th>
+        <th data-sort-value="{{post['reposts_count']}}">
+            {{post['reposts_count']}}
+        </th>
+        <th data-sort-value="{{post['fullname']}}">
+            {{post['fullname']}}
+        </th>
+    </tr>
+
+    {% endfor %}
+    </tbody>
+
+</table>
+
+<script src="{{url_for('static', filename='js/table_script.js')}}"></script>
+{% endblock %}
+
+{% endblock %}

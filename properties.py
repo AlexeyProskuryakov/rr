@@ -13,7 +13,13 @@ def module_path():
         )
     return os.path.dirname(__file__)
 
+import urllib3
+import certifi
 
+http = urllib3.PoolManager(
+    cert_reqs='CERT_REQUIRED', # Force certificate check.
+    ca_certs=certifi.where(),  # Path to the Certifi bundle.
+)
 
 log_file = os.path.join(module_path(), 'result.log')
 logger = logging.getLogger()
