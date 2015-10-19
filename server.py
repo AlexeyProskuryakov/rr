@@ -37,7 +37,7 @@ db = DBHandler()
 
 class User(object):
     def __init__(self, name, pwd):
-        self.id = unicode(uuid4().get_hex())
+        self.id = str(uuid4().get_hex())
         self.auth = False
         self.active = False
         self.anonymous = False
@@ -120,7 +120,6 @@ def load_user(userid):
 
 @login_manager.unauthorized_handler
 def unauthorized_callback():
-    print "uauth"
     return redirect(url_for('login'))
 
 
@@ -171,7 +170,7 @@ def add_subreddit():
     params['shift'] = int(request.form.get("shift") or 0)
     params['time_min'] = request.form.get("time_min") or properties.default_time_min
 
-    db.add_subreddit(name, params, step)
+    db.add_subfreddit(name, params, step)
     try:
         tq.put({"name": name})
     except Exception as e:

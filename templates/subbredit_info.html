@@ -11,7 +11,9 @@
 
 {% block content %}
 
-<a href="{{url_for('main')}}">Back to main</a>
+<a href="{{url_for('main')}}"> <h1><<<<< Back to main</h1>
+
+</a>
 <h1> [{{sbrdt_info['name']}}] info:</h1>
 <hr>
 <table class="table table-striped">
@@ -174,9 +176,9 @@
 </table>
 <hr>
 <h1>
-    And here is our interested posts...
+    POSTS:
 </h1>
-<table id="table" class="table table-striped">
+<table id="table" class="table table-striped sortable">
     <thead>
     <tr>
         <th>
@@ -185,23 +187,23 @@
         <th>
             title
         </th>
-        <th data-sort="int">
+        <th>
             created dt
         </th>
-        <th data-sort="int">
+        <th>
             ups
         </th>
-        <th data-sort="int">
+        <th>
             reposts count
         </th>
-        <th data-sort="string">
+        <th>
             post id (fullname)
         </th>
     </tr>
     </thead>
     <tbody>
 
-    {% for post in posts%}
+    {% for post in posts %}
 
     <tr>
         <th>
@@ -210,16 +212,16 @@
         <th>
             <a href="{{post['reddit_url']}}">{{ post['title'] }}</a>
         </th>
-        <th data-sort-value="{{post['created_utc']}}">
+        <th sorttable_customkey="{{post['created_utc']}}">
             {{post['created_dt']}}
         </th>
-        <th data-sort-value="{{post['ups']}}">
+        <th sorttable_customkey="{{post['ups']}}">
             {{post['ups']}}
         </th>
-        <th data-sort-value="{{post['reposts_count']}}">
+        <th sorttable_customkey="{{post['reposts_count']}}">
             {{post['reposts_count']}}
         </th>
-        <th data-sort-value="{{post['fullname']}}">
+        <th sorttable_customkey="{{post['fullname']}}">
             {{post['fullname']}}
         </th>
     </tr>
@@ -228,8 +230,6 @@
     </tbody>
 
 </table>
-
-<script src="{{url_for('static', filename='js/table_script.js')}}"></script>
 {% endblock %}
 
 {% endblock %}

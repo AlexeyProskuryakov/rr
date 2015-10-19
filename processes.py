@@ -22,14 +22,27 @@ class SubredditProcessWorker(Process):
             try:
                 task = self.tq.get()
                 name = task.get("name")
-                posts = reddit_get_new(name)
                 subreddit = self.db.get_subreddit(name)
                 if not subreddit:
-                    print "PW: not params.. bad..."
-                    raise Exception
+                    log.error("not subreddit of this name")
+                    raise Exception("not subreddit o name:%s" % name)
+
+                posts = reddit_get_new(name)
+
+                #if part of loaded posts was persisted we skip this part
+                interested_posts = []
+                prev_present = False
+                for post in posts:
+                    if self.db.is_post_present(post.get("fullname")):
+                        if prev_present:
+                            break
+                        else:
+                            prev_present = True
+                    else:
+                        interested_posts.append(post)
+
                 params = subreddit.get("params")
-                # params['last_update'] = subreddit.get("last_update", 0) - timedelta(hours=10).total_seconds()
-                for post in self.retriever.process_subreddit(posts, params):
+                for post in self.retriever.process_subreddit(interested_posts, params):
                     self.db.save_post(post)
 
                 step = get_current_step(posts)
@@ -37,7 +50,7 @@ class SubredditProcessWorker(Process):
                                                      "count_all_posts": len(posts),
                                                      "statistics": self.retriever.statistics_cache[name]})
             except Exception as e:
-                print "PW:", e
+                log.exception(e)
                 sleep(1)
                 continue
 
@@ -51,7 +64,8 @@ class WorkNotifier(Process):
     def run(self):
         while 1:
             subreddits = self.db.get_subreddits_to_process()
-            log.info("this will be updates!:%s" % subreddits)
+            if subreddits:
+                log.info("this will be updates %s" % subreddits)
             for subreddit_to_process in subreddits:
                 self.tq.put({"name": subreddit_to_process})
                 self.db.toggle_subreddit(subreddit_to_process)

@@ -55,6 +55,10 @@ class DBHandler(object):
         if not self.posts.find_one({"fullname": post.get("fullname"), "video_id": post.get("video_id")}):
             self.posts.insert_one(post)
 
+    def is_post_present(self, post_full_name):
+        found = self.posts.find_one({"fullname": post_full_name})
+        return found is not None
+
     def add_subreddit(self, subreddit_name, retrieve_params, time_step):
         found = self.subreddits.find_one({"name": subreddit_name})
         if found:
@@ -72,12 +76,10 @@ class DBHandler(object):
         return found
 
     def update_subreddit_params(self, name, subreddit_params):
-        to_upd = {}
-        to_upd['params'] = subreddit_params
-        self.subreddits.update_one({"name": name}, {"$set": to_upd})
+        self.subreddits.update_one({"name": name}, {"$set": {"params": subreddit_params}})
 
     def update_subreddit_info(self, name, info):
-        if 'time_window' in info and info['time_step'] is None:
+        if 'time_window' in info and info.get('time_step', None) is None:
             info['time_step'] = info['time_window'] / 2
 
         self.subreddits.update_one({"name": name}, {"$set": info})

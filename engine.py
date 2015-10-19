@@ -133,7 +133,7 @@ class Retriever(object):
         if not posts:
             log.error("no posts")
             return
-        print datetime.fromtimestamp(posts[0].get("created_utc")), datetime.fromtimestamp(posts[-1].get("created_utc"))
+
         for post in posts:
             create_time = post.get("created_utc")
             if create_time + params.get('shift', 0) < time.time() and create_time > params.get('last_update', 0):
