@@ -11,28 +11,28 @@ from db import DBHandler
 
 from processes import SubredditProcessWorker, WorkNotifier
 import properties
+import os
 
 __author__ = '4ikist'
 
+log = logging.getLogger("web")
 app = Flask("rr")
 
 app.secret_key = 'fooooooo'
 app.config['SESSION_TYPE'] = 'filesystem'
 
-app.config["SECRET_KEY"] = "foooo"
-
-app.debug = True
-app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
-toolbar = DebugToolbarExtension(app)
+if os.environ.get("test", False):
+    log.info("will run at test mode")
+    app.config["SECRET_KEY"] = "foooo"
+    app.debug = True
+    app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
+    toolbar = DebugToolbarExtension(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-log = logging.getLogger("web")
-
 db = DBHandler()
-
 
 
 class User(object):
@@ -55,10 +55,6 @@ class User(object):
 
     def get_id(self):
         return self.id
-
-
-auth_id_f = lambda user: hash("%s%s" % (user.name, user.pwd))
-auth_id_fpn = lambda name, pwd: hash("%s%s" % (name, pwd))
 
 
 class UsersHandler(object):
@@ -100,6 +96,7 @@ class UsersHandler(object):
 
 
 usersHandler = UsersHandler()
+log.info("users handler was initted")
 usersHandler.add_user(User("3030", "1"))
 
 
@@ -151,11 +148,6 @@ def logout():
 
 rq = Queue()
 tq = Queue()
-db_hndlr = DBHandler()
-
-wrkr = SubredditProcessWorker(tq, rq, db_hndlr)
-wrkr.daemon = True
-wrkr.start()
 
 
 @app.route("/subreddit/add", methods=['POST'])
@@ -170,7 +162,7 @@ def add_subreddit():
     params['shift'] = int(request.form.get("shift") or 0)
     params['time_min'] = request.form.get("time_min") or properties.default_time_min
 
-    db.add_subfreddit(name, params, step)
+    db.add_subreddit(name, params, step)
     try:
         tq.put({"name": name})
     except Exception as e:
@@ -201,8 +193,7 @@ def info_subreddit(name):
     user = g.user
     posts = db.get_posts_of_subreddit(name)
     sbrdt_info = db.get_subreddists_statistic()[name]
-    return render_template("subbredit_info.html", **{"now": datetime.now(),
-                                                     "username": user.name,
+    return render_template("subbredit_info.html", **{"username": user.name,
                                                      "posts": posts,
                                                      "sbrdt_info": sbrdt_info})
 
@@ -213,12 +204,15 @@ def main():
     user = g.user
     result = db.get_subreddists_statistic()
 
-    return render_template("main.html", **{"now": datetime.now(),
-                                           "username": user.name,
+    return render_template("main.html", **{"username": user.name,
                                            "result": result})
 
 
-workNotifier = WorkNotifier(tq,db)
+wrkr = SubredditProcessWorker(tq, rq, db)
+wrkr.daemon = True
+wrkr.start()
+
+workNotifier = WorkNotifier(tq, db)
 workNotifier.daemon = True
 workNotifier.start()
 

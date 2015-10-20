@@ -1,4 +1,3 @@
-from datetime import timedelta
 import logging
 from multiprocessing import Process
 from time import sleep
@@ -16,8 +15,10 @@ class SubredditProcessWorker(Process):
         self.rq = rq
         self.db = db
         self.retriever = Retriever()
+        log.info("SPW inited...")
 
     def run(self):
+        log.info("SPW will start...")
         while 1:
             try:
                 task = self.tq.get()
@@ -60,8 +61,10 @@ class WorkNotifier(Process):
         super(WorkNotifier, self).__init__()
         self.tq = tq
         self.db = db
+        log.info("WN inited...")
 
     def run(self):
+        log.info("WN will start...")
         while 1:
             subreddits = self.db.get_subreddits_to_process()
             if subreddits:

@@ -1,5 +1,6 @@
 from datetime import datetime
 import hashlib
+import logging
 import pymongo
 import time
 
@@ -7,9 +8,12 @@ __author__ = 'alesha'
 from pymongo import MongoClient
 import properties
 
+log = logging.getLogger("DB")
+
 
 class DBHandler(object):
     def __init__(self):
+        log.info("start db handler %s" % properties.mongo_uri)
         client = MongoClient(host=properties.mongo_uri)
         db = client['rr']
         self.posts = db['posts']
@@ -29,6 +33,7 @@ class DBHandler(object):
         self.users.create_index([("user_id", pymongo.ASCENDING)], unique=True)
 
     def add_user(self, name, pwd, uid):
+        log.info("add user %s %s %s"%(name, pwd, uid))
         if not self.users.find_one({"$or": [{"user_id": uid}, {"name": name}]}):
             m = hashlib.md5()
             m.update(pwd)

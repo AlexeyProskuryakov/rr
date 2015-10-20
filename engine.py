@@ -17,6 +17,7 @@ log = logging.getLogger("engine")
 
 reddit = praw.Reddit(user_agent="foo")
 reddit.login("4ikist", "sederfes", disable_warning=True)
+log.info("reddit is connected")
 
 
 def retrieve_video_id(url):
@@ -93,27 +94,30 @@ class Retriever(object):
             return
         add_stat = partial(self._add_statistic_inc, post.get("subreddit").display_name, post.get("id"))
         ups_count = int(post.get("ups"))
-        if ups_count > ups_min and ups_count < ups_max:
-            video_id = post.get("video_id")
-            if video_id:
-                video_time = youtube.get_time(video_id)
-                if video_time and to_seconds(parse_time(time_min)) > to_seconds(video_time):
-                    try:
-                        repost_count = get_reposts_count(video_id)
-                        if repost_count < rp_max:
-                            post["time"] = video_time
-                            post["reposts_count"] = repost_count
-                            return post
-                        else:
-                            add_stat("big_reposts_count")
-                    except Exception as e:
-                        log.error(e)
+        if ups_count > ups_min:
+            if ups_count < ups_max:
+                video_id = post.get("video_id")
+                if video_id:
+                    video_time = youtube.get_time(video_id)
+                    if video_time and to_seconds(parse_time(time_min)) > to_seconds(video_time):
+                        try:
+                            repost_count = get_reposts_count(video_id)
+                            if repost_count < rp_max:
+                                post["time"] = video_time
+                                post["reposts_count"] = repost_count
+                                return post
+                            else:
+                                add_stat("big_reposts_count")
+                        except Exception as e:
+                            log.error(e)
+                    else:
+                        add_stat("little_time")
                 else:
-                    add_stat("little_time")
+                    add_stat("not_video")
             else:
-                add_stat("not_video")
+                add_stat("big_ups")
         else:
-            add_stat("bad_ups")
+            add_stat("little_ups")
 
     def process_subreddit(self, posts, params):
         """

@@ -1,14 +1,6 @@
 {% extends "layout.html" %}
 {% block body %}
 
-<h1>
-    HELLO! {{ username }}
-</h1>
-<h3>
-    NOW IS {{ now }}
-</h3>
-
-
 {% block content %}
 
 <a href="{{url_for('main')}}"> <h1><<<<< Back to main</h1>
@@ -23,7 +15,22 @@
             Name
         </th>
         <th>
-            Current statistics
+            <table class="inner">
+                                <thead>
+                                <tr>
+                                    <th class="glyphicon glyphicon-chevron-up">
+                                    </th>
+                                    <th class="glyphicon glyphicon-chevron-down">
+                                    </th>
+                                    <th class="glyphicon glyphicon-eye-open">
+                                    </th>
+                                    <th class="glyphicon glyphicon-time">
+                                    </th>
+                                    <th class="glyphicon glyphicon-remove">
+                                    </th>
+                                </tr>
+                                </thead>
+                            </table>
         </th>
         <th>
             Next time retrieve
@@ -44,7 +51,30 @@
             {{sbrdt_info['name'] }}
         </th>
         <th>
-            {{sbrdt_info['statistics']}}
+             <table class="inner">
+                                <tbody>
+                                <tr>
+                                    <th>
+                                        {{sbrdt_info['statistics']['big_ups']}}
+                                    </th>
+                                    <th>
+                                        {{sbrdt_info['statistics']['little_ups']}}
+                                    </th>
+                                    <th>
+                                        {{sbrdt_info['statistics']['big_reposts_count']}}
+                                    </th>
+                                    <th>
+                                        {{sbrdt_info['statistics']['little_time']}}
+                                    </th>
+                                    <th>
+                                        {{sbrdt_info['statistics']['not_video']}}
+                                    </th>
+
+                                </tr>
+                                </tbody>
+                            </table>
+
+
         </th>
         <th>
             {{sbrdt_info['next_time_retrieve']}}
