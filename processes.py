@@ -42,25 +42,30 @@ class SubredditProcessWorker(Process):
                     if not self.db.is_post_video_id_is_present(post.get("video_id")):
                         interested_posts.append(post)
 
-
                 params = subreddit.get("params")
                 for post in self.retriever.process_subreddit(interested_posts, params):
                     self.db.save_post(post)
 
-                step = get_current_step(posts)
-                self.db.update_subreddit_info(name, {"time_window": step,
+                time_window = get_current_step(posts)
+                self.db.update_subreddit_info(name, {"time_window": time_window,
                                                      "count_all_posts": len(posts),
                                                      "statistics": self.retriever.statistics_cache[name],
-                                                     "head_post_id":posts[0].get("fullname")})
+                                                     "head_post_id": posts[0].get("fullname")})
+
+                time_step = subreddit.get("time_step")
+                next_time_step = float(time_step) / (float(len(posts)) / len(interested_posts))
+                log.info("for subreddit [%s] time next time to update will be: %s second\nprevious time step is: %s" % (
+                name, next_time_step, time_step))
+                self.db.toggle_subreddit(name, next_time_step=next_time_step)
             except Exception as e:
                 log.exception(e)
                 sleep(1)
                 continue
 
 
-class WorkNotifier(Process):
+class SubredditUpdater(Process):
     def __init__(self, tq, db):
-        super(WorkNotifier, self).__init__()
+        super(SubredditUpdater, self).__init__()
         self.tq = tq
         self.db = db
         log.info("WN inited...")
@@ -73,7 +78,6 @@ class WorkNotifier(Process):
                 log.info("this will be updates %s" % subreddits)
             for subreddit_to_process in subreddits:
                 self.tq.put({"name": subreddit_to_process})
-                self.db.toggle_subreddit(subreddit_to_process)
             sleep(120)
 
 
@@ -107,13 +111,11 @@ class PostUpdater(Process):
                                                                  sbrdt_params.get("reposts_max"),
                                                                  sbrdt_params.get("rate_min"),
                                                                  sbrdt_params.get("rate_max"),
-                                                                 None
-                                                                 )
+                                                                 None)
                     if processed_post:
                         self.db.update_post(to_save(processed_post))
                     else:
                         self.db.delete_post(post.get("fullname"), post.get("video_id"))
-
             sleep(min_update_period)
 
 

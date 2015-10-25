@@ -9,7 +9,7 @@ from multiprocessing import Queue
 from werkzeug.utils import redirect
 from db import DBHandler
 
-from processes import SubredditProcessWorker, WorkNotifier, PostUpdater
+from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater
 import properties
 import os
 
@@ -211,17 +211,17 @@ def main():
                                            "result": result})
 
 
-wrkr = SubredditProcessWorker(tq, rq, db)
-wrkr.daemon = True
-wrkr.start()
+spw = SubredditProcessWorker(tq, rq, db)
+spw.daemon = True
+spw.start()
 
-workNotifier = WorkNotifier(tq, db)
-workNotifier.daemon = True
-workNotifier.start()
+su = SubredditUpdater(tq, db)
+su.daemon = True
+su.start()
 
-postUpdater = PostUpdater(db)
-postUpdater.daemon = True
-postUpdater.start()
+pu = PostUpdater(db)
+pu.daemon = True
+pu.start()
 
 if __name__ == '__main__':
     app.run(port=5000)

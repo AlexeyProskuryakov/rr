@@ -3,6 +3,7 @@ import hashlib
 import logging
 import pymongo
 import time
+from properties import min_time_step
 
 __author__ = 'alesha'
 from pymongo import MongoClient
@@ -67,7 +68,7 @@ class DBHandler(object):
         return found is not None
 
     def is_post_video_id_is_present(self, video_id):
-        found = self.posts.find_one({"video_id":video_id})
+        found = self.posts.find_one({"video_id": video_id})
         return found is not None
 
     def update_post(self, post):
@@ -87,11 +88,12 @@ class DBHandler(object):
         if found:
             self.update_subreddit_params(subreddit_name, retrieve_params, {"time_step": time_step})
         else:
+            _time_step = time_step or min_time_step
             new = {'name': subreddit_name,
                    'params': retrieve_params,
-                   "time_step": time_step,
+                   "time_step": _time_step,
                    'last_update': time.time(),
-                   'next_update': time.time() + time_step or 3600}
+                   'next_update': time.time() + _time_step}
             self.subreddits.insert_one(new)
 
     def get_subreddit(self, name):
@@ -107,13 +109,14 @@ class DBHandler(object):
     def update_subreddit_info(self, name, info):
         self.subreddits.update_one({"name": name}, {"$set": info})
 
-    def toggle_subreddit(self, name):
+    def toggle_subreddit(self, name, next_time_step=None):
         found = self.subreddits.find_one({"name": name})
         if found:
-            step = found.get('time_step')
+            step = next_time_step or found.get('time_step')
             upd = {}
             upd['last_update'] = time.time()
-            upd['next_update'] = time.time() + (step if step else 3600)
+            upd['next_update'] = time.time() + step
+            upd['time_step'] = step
             self.update_subreddit_info(name, upd)
 
     def get_subreddits_to_process(self):
