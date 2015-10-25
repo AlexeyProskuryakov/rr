@@ -34,15 +34,14 @@ class SubredditProcessWorker(Process):
 
                 # if part of loaded posts was persisted we skip this part
                 interested_posts = []
-                prev_present = False
                 for post in posts:
-                    if self.db.is_post_present(post.get("fullname")):
-                        if prev_present:
-                            break
-                        else:
-                            prev_present = True
-                    else:
+                    subreddit_head_id = subreddit.get("head_post_id")
+                    if subreddit_head_id and post.get("fullname") == subreddit_head_id:
+                        break
+
+                    if not self.db.is_post_video_id_is_present(post.get("video_id")):
                         interested_posts.append(post)
+
 
                 params = subreddit.get("params")
                 for post in self.retriever.process_subreddit(interested_posts, params):
@@ -51,7 +50,8 @@ class SubredditProcessWorker(Process):
                 step = get_current_step(posts)
                 self.db.update_subreddit_info(name, {"time_window": step,
                                                      "count_all_posts": len(posts),
-                                                     "statistics": self.retriever.statistics_cache[name]})
+                                                     "statistics": self.retriever.statistics_cache[name],
+                                                     "head_post_id":posts[0].get("fullname")})
             except Exception as e:
                 log.exception(e)
                 sleep(1)
@@ -115,6 +115,7 @@ class PostUpdater(Process):
                         self.db.delete_post(post.get("fullname"), post.get("video_id"))
 
             sleep(min_update_period)
+
 
 if __name__ == '__main__':
     db = DBHandler()

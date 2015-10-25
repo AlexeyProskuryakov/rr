@@ -66,6 +66,10 @@ class DBHandler(object):
         found = self.posts.find_one({"fullname": post_full_name})
         return found is not None
 
+    def is_post_video_id_is_present(self, video_id):
+        found = self.posts.find_one({"video_id":video_id})
+        return found is not None
+
     def update_post(self, post):
         post['updated'] = time.time()
         self.posts.update_one({"fullname": post.get("fullname"), "video_id": post.get("video_id")}, {"$set": post})
