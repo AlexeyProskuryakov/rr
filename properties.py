@@ -33,3 +33,5 @@ default_time_min = "PT0H1M30S"
 
 min_update_period = 3600*24
 min_time_step = 3600
+
+time_step_less_iteration_power = 0.85

@@ -3,7 +3,7 @@ from multiprocessing import Process
 from time import sleep
 from db import DBHandler
 from engine import Retriever, reddit_get_new, get_current_step, to_save
-from properties import min_update_period
+from properties import min_update_period, time_step_less_iteration_power
 
 __author__ = 'alesha'
 
@@ -52,15 +52,24 @@ class SubredditProcessWorker(Process):
                                                      "statistics": self.retriever.statistics_cache[name],
                                                      "head_post_id": posts[0].get("fullname")})
 
-                time_step = subreddit.get("time_step")
-                next_time_step = float(time_step) / (float(len(posts)) / len(interested_posts))
-                log.info("for subreddit [%s] time next time to update will be: %s second\nprevious time step is: %s" % (
-                name, next_time_step, time_step))
+                next_time_step = self.ensure_time_step(subreddit, posts, interested_posts)
                 self.db.toggle_subreddit(name, next_time_step=next_time_step)
             except Exception as e:
                 log.exception(e)
                 sleep(1)
                 continue
+
+    def ensure_time_step(self, subreddit, posts, interested_posts):
+        name = subreddit.get("name")
+        time_step = subreddit.get("time_step")
+        len_posts, len_interested_posts = float(len(posts)), float(len(interested_posts))
+        if len_posts == len_interested_posts:
+            next_time_step = float(time_step) * time_step_less_iteration_power
+        else:
+            next_time_step = float(time_step) / (len_posts / len_interested_posts)
+        log.info("for subreddit [%s] next time step is: %s second\nprevious time step is: %s" % (
+            name, next_time_step, time_step))
+        return next_time_step
 
 
 class SubredditUpdater(Process):
