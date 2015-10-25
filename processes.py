@@ -1,7 +1,9 @@
 import logging
 from multiprocessing import Process
 from time import sleep
-from engine import Retriever, reddit_get_new, get_current_step
+from db import DBHandler
+from engine import Retriever, reddit_get_new, get_current_step, to_save
+from properties import min_update_period
 
 __author__ = 'alesha'
 
@@ -25,12 +27,12 @@ class SubredditProcessWorker(Process):
                 name = task.get("name")
                 subreddit = self.db.get_subreddit(name)
                 if not subreddit:
-                    log.error("not subreddit of this name")
+                    log.error("not subreddit of this name %s", name)
                     raise Exception("not subreddit o name:%s" % name)
 
                 posts = reddit_get_new(name)
 
-                #if part of loaded posts was persisted we skip this part
+                # if part of loaded posts was persisted we skip this part
                 interested_posts = []
                 prev_present = False
                 for post in posts:
@@ -73,3 +75,48 @@ class WorkNotifier(Process):
                 self.tq.put({"name": subreddit_to_process})
                 self.db.toggle_subreddit(subreddit_to_process)
             sleep(120)
+
+
+class PostUpdater(Process):
+    def __init__(self, db):
+        super(PostUpdater, self).__init__()
+        self.db = db
+        self.retriever = Retriever()
+
+    def run(self):
+        log.info("PU will start...")
+        while 1:
+            subreddits = {}
+            for_update = self.db.get_posts_for_update()
+            log.info("will update %s posts...", for_update.count())
+            posts_fullnames = []
+            if for_update.count() > 0:
+                for post in for_update:
+                    subreddit = post.get("subreddit")
+                    if subreddit not in subreddits:
+                        sbrdt = self.db.get_subreddit(subreddit)
+                        sbrdt_params = sbrdt.get("params")
+                        if sbrdt and sbrdt_params:
+                            subreddits[subreddit] = sbrdt_params
+                    posts_fullnames.append(post.get("fullname"))
+
+                posts = self.retriever.update_posts(posts_fullnames)
+                for post in posts:
+                    sbrdt_params = subreddits.get(post.get("subreddit"))
+                    processed_post = self.retriever.process_post(post,
+                                                                 sbrdt_params.get("reposts_max"),
+                                                                 sbrdt_params.get("rate_min"),
+                                                                 sbrdt_params.get("rate_max"),
+                                                                 None
+                                                                 )
+                    if processed_post:
+                        self.db.update_post(to_save(processed_post))
+                    else:
+                        self.db.delete_post(post.get("fullname"), post.get("video_id"))
+
+            sleep(min_update_period)
+
+if __name__ == '__main__':
+    db = DBHandler()
+    pu = PostUpdater(db)
+    pu.start()

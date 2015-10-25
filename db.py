@@ -21,6 +21,7 @@ class DBHandler(object):
         self.posts.create_index([("video_id", pymongo.ASCENDING)])
         self.posts.create_index([("fullname", pymongo.ASCENDING), ("video_id", pymongo.DESCENDING)], unique=True)
         self.posts.create_index([("subreddit", pymongo.ASCENDING)])
+        self.posts.create_index([("updated", pymongo.ASCENDING)])
 
         self.subreddits = db['subreddits']
         self.subreddits.create_index([("name", pymongo.ASCENDING)], unique=True)
@@ -33,7 +34,7 @@ class DBHandler(object):
         self.users.create_index([("user_id", pymongo.ASCENDING)], unique=True)
 
     def add_user(self, name, pwd, uid):
-        log.info("add user %s %s %s"%(name, pwd, uid))
+        log.info("add user %s %s %s" % (name, pwd, uid))
         if not self.users.find_one({"$or": [{"user_id": uid}, {"name": name}]}):
             m = hashlib.md5()
             m.update(pwd)
@@ -58,16 +59,29 @@ class DBHandler(object):
 
     def save_post(self, post):
         if not self.posts.find_one({"fullname": post.get("fullname"), "video_id": post.get("video_id")}):
+            post['updated'] = time.time()
             self.posts.insert_one(post)
 
     def is_post_present(self, post_full_name):
         found = self.posts.find_one({"fullname": post_full_name})
         return found is not None
 
+    def update_post(self, post):
+        post['updated'] = time.time()
+        self.posts.update_one({"fullname": post.get("fullname"), "video_id": post.get("video_id")}, {"$set": post})
+
+    def delete_post(self, full_name, video_id):
+        self.posts.delete_one({"fullname": full_name, "video_id": video_id})
+
+    def get_posts_for_update(self, min_update_period=properties.min_update_period):
+        found = self.posts.find(
+            {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}]})
+        return found
+
     def add_subreddit(self, subreddit_name, retrieve_params, time_step):
         found = self.subreddits.find_one({"name": subreddit_name})
         if found:
-            self.update_subreddit_params(subreddit_name, retrieve_params)
+            self.update_subreddit_params(subreddit_name, retrieve_params, {"time_step": time_step})
         else:
             new = {'name': subreddit_name,
                    'params': retrieve_params,
@@ -80,13 +94,13 @@ class DBHandler(object):
         found = self.subreddits.find_one({"name": name})
         return found
 
-    def update_subreddit_params(self, name, subreddit_params):
-        self.subreddits.update_one({"name": name}, {"$set": {"params": subreddit_params}})
+    def update_subreddit_params(self, name, subreddit_params, subreddit_info=None):
+        set = {"$set": {"params": subreddit_params}}
+        if subreddit_info:
+            set = dict(set, **subreddit_info)
+        self.subreddits.update_one({"name": name}, set)
 
     def update_subreddit_info(self, name, info):
-        if 'time_window' in info and info.get('time_step', None) is None:
-            info['time_step'] = info['time_window'] / 2
-
         self.subreddits.update_one({"name": name}, {"$set": info})
 
     def toggle_subreddit(self, name):
@@ -95,7 +109,7 @@ class DBHandler(object):
             step = found.get('time_step')
             upd = {}
             upd['last_update'] = time.time()
-            upd['next_update'] = time.time() + step or 3600
+            upd['next_update'] = time.time() + (step if step else 3600)
             self.update_subreddit_info(name, upd)
 
     def get_subreddits_to_process(self):

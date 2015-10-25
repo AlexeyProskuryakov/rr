@@ -9,7 +9,7 @@ from multiprocessing import Queue
 from werkzeug.utils import redirect
 from db import DBHandler
 
-from processes import SubredditProcessWorker, WorkNotifier
+from processes import SubredditProcessWorker, WorkNotifier, PostUpdater
 import properties
 import os
 
@@ -62,6 +62,11 @@ class UsersHandler(object):
         self.users = {}
         self.auth_users = {}
 
+    def get_guest(self):
+        user = User("Guest", "")
+        self.users[user.id] = user
+        return user
+
     def get_by_id(self, id):
         found = self.users.get(id)
         if not found:
@@ -105,8 +110,7 @@ def load_user():
     if session.get("user_id"):
         user = usersHandler.get_by_id(session.get("user_id"))
     else:
-        user = {"name": "Guest"}  # Make it better, use an anonymous User instead
-
+        user = usersHandler.get_guest()
     g.user = user
 
 
@@ -203,7 +207,6 @@ def info_subreddit(name):
 def main():
     user = g.user
     result = db.get_subreddists_statistic()
-
     return render_template("main.html", **{"username": user.name,
                                            "result": result})
 
@@ -215,6 +218,10 @@ wrkr.start()
 workNotifier = WorkNotifier(tq, db)
 workNotifier.daemon = True
 workNotifier.start()
+
+postUpdater = PostUpdater(db)
+postUpdater.daemon = True
+postUpdater.start()
 
 if __name__ == '__main__':
     app.run(port=5000)

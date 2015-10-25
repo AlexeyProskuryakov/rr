@@ -10,9 +10,6 @@ import praw
 import re
 import youtube
 
-
-
-
 log = logging.getLogger("engine")
 
 reddit = praw.Reddit(user_agent="foo")
@@ -35,6 +32,7 @@ def to_show(el):
     result = el.__dict__
     result['fullname'] = full_name
     result["video_id"] = retrieve_video_id(el.url)
+    result["subreddit"] = el.subreddit.display_name
     return result
 
 
@@ -59,21 +57,48 @@ def get_reposts_count(video_id):
     return count
 
 
+def update_post(full_name):
+    information = reddit.get_info(thing_id=full_name)
+    if isinstance(information, list):
+        return map(to_show, information)
+    if information:
+        return to_show(information)
+    return None
+
 
 def get_current_step(posts):
     dt = datetime.fromtimestamp(posts[0].get("created_utc")) - datetime.fromtimestamp(posts[-1].get("created_utc"))
     return dt.seconds
 
 
-
+def to_save(post):
+    return {"video_id": post.get("video_id"),
+            "video_url": post.get("url"),
+            "title": post.get("title"),
+            "ups": post.get("ups"),
+            "reddit_url": post.get("permalink"),
+            "subreddit": post.get("subreddit"),
+            "fullname": post.get("fullname"),
+            "reposts_count": post.get("reposts_count"),
+            "created_utc": post.get("created_utc"),
+            "created_dt": datetime.fromtimestamp(post.get("created_utc")),
+            }
 
 
 class Retriever(object):
     def __init__(self):
-        self.statistics_cache = {"little_ups": 0, "little_time": 0, "big_reposts_count": 0, "not_video": 0, "big_ups": 0}
+        self.statistics_cache = {"little_ups": 0, "little_time": 0, "big_reposts_count": 0, "not_video": 0,
+                                 "big_ups": 0}
         self.bad_cache = set()
 
-    def _add_statistic_inc(self,subreddit, post_id, name_param):
+    def update_posts(self, fullnames):
+        names = []
+        for name in fullnames:
+            if name.startswith("t1") or name.startswith("t3") or name.startswith("t5"):
+                names.append(name)
+        return update_post(fullnames)
+
+    def _add_statistic_inc(self, subreddit, post_id, name_param):
         self.bad_cache.add(post_id)
         stat = self.statistics_cache.get(subreddit)
         if not stat:
@@ -88,30 +113,34 @@ class Retriever(object):
 
         self.statistics_cache[subreddit] = stat
 
-
     def process_post(self, post, rp_max, ups_min, ups_max, time_min):
         if post.get("id") in self.bad_cache:
             return
-        add_stat = partial(self._add_statistic_inc, post.get("subreddit").display_name, post.get("id"))
+        add_stat = partial(self._add_statistic_inc, post.get("subreddit"), post.get("id"))
         ups_count = int(post.get("ups"))
         if ups_count > ups_min:
             if ups_count < ups_max:
                 video_id = post.get("video_id")
                 if video_id:
-                    video_time = youtube.get_time(video_id)
-                    if video_time and to_seconds(parse_time(time_min)) > to_seconds(video_time):
-                        try:
-                            repost_count = get_reposts_count(video_id)
-                            if repost_count < rp_max:
-                                post["time"] = video_time
-                                post["reposts_count"] = repost_count
-                                return post
-                            else:
-                                add_stat("big_reposts_count")
-                        except Exception as e:
-                            log.error(e)
-                    else:
-                        add_stat("little_time")
+                    if time_min:
+                        video_time = youtube.get_time(video_id)
+                        if video_time and to_seconds(parse_time(time_min)) > to_seconds(video_time):
+                            post["time"] = video_time
+                        else:
+                            add_stat("little_time")
+                            return
+
+                    try:
+                        repost_count = get_reposts_count(video_id)
+                        if repost_count < rp_max:
+                            post["reposts_count"] = repost_count
+                            return post
+                        else:
+                            add_stat("big_reposts_count")
+                    except Exception as e:
+                        log.error(e)
+
+
                 else:
                     add_stat("not_video")
             else:
@@ -142,31 +171,19 @@ class Retriever(object):
             create_time = post.get("created_utc")
             if create_time + params.get('shift', 0) < time.time() and create_time > params.get('last_update', 0):
                 post = self.process_post(post,
-                                    params.get('reposts_max', 0),
-                                    params.get('rate_min', 0),
-                                    params.get('rate_max', 99999),
-                                    time_min)
+                                         params.get('reposts_max', 0),
+                                         params.get('rate_min', 0),
+                                         params.get('rate_max', 99999),
+                                         time_min)
                 if post is not None:
                     post_id = post.get("id")
                     if post_id in result_acc:
                         continue
 
                     result_acc.add(post_id)
-                    yield {"video_id": post.get("video_id"),
-                           "video_url": post.get("url"),
-                           "title": post.get("title"),
-                           "ups": post.get("ups"),
-                           "reddit_url": post.get("permalink"),
-                           "subreddit": post.get("subreddit").display_name,
-                           "fullname": post.get("fullname"),
-                           "reposts_count": post.get("reposts_count"),
-                           "created_utc": post.get("created_utc"),
-                           "created_dt":datetime.fromtimestamp(post.get("created_utc")),
-
-                           }
-
+                    yield to_save(post)
 
 
 if __name__ == '__main__':
-    pass
-
+    result = update_post(["t3_3p5q1r", "t3_3p69uw"])
+    print result
