@@ -158,7 +158,7 @@ tq = Queue()
 @login_required
 def add_subreddit():
     name = request.form.get("name") or "funny"
-    step = int(request.form.get('step'), 0) or None
+    step = int(request.form.get('step') or 0 ) or None
     params = {}
     params['rate_min'] = int(request.form.get("rate_min") or 0)
     params['rate_max'] = int(request.form.get("rate_max") or 99999)

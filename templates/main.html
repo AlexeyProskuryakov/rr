@@ -134,6 +134,9 @@
                         <th>
                             Last batch retrieved
                         </th>
+                        <th>
+                            Error?
+                        </th>
                     </tr>
                     </thead>
                     <tbody>
@@ -181,7 +184,9 @@
                         <th>
                             {{el.get('count_all_posts', 0)}}
                         </th>
-
+                        <th>
+                            {{el.get('error',"All ok")}}
+                        </th>
                         <th>
                             <button type="button" class="btn btn-info" data-toggle="modal"
                                     data-target="#{{ el['name'] }}Modal">CHANGE PARAMS

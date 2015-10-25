@@ -42,9 +42,13 @@
         <th>
             Time window in retrieved
         </th>
+        <th>
+            Error?
+        </th>
     </tr>
     </thead>
     <tbody>
+
 
     <tr>
         <th>
@@ -85,7 +89,9 @@
         <th>
             {{sbrdt_info['time_window']}}
         </th>
-
+        <th>
+            {{sbrdt_info['error']}}
+        </th>
         <th>
             <button type="button" class="btn btn-info" data-toggle="modal"
                     data-target="#{{ sbrdt_info['name'] }}Modal">CHANGE PARAMS

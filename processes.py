@@ -30,8 +30,12 @@ class SubredditProcessWorker(Process):
                     log.error("not subreddit of this name %s", name)
                     raise Exception("not subreddit o name:%s" % name)
 
-                posts = reddit_get_new(name)
-
+                try:
+                    posts = reddit_get_new(name)
+                except Exception as e:
+                    self.db.update_subreddit_info(name, {"error": e.message})
+                    log.error("can not find any posts for %s" % name)
+                    continue
                 # if part of loaded posts was persisted we skip this part
                 interested_posts = []
                 for post in posts:
@@ -77,10 +81,10 @@ class SubredditUpdater(Process):
         super(SubredditUpdater, self).__init__()
         self.tq = tq
         self.db = db
-        log.info("WN inited...")
+        log.info("SU inited...")
 
     def run(self):
-        log.info("WN will start...")
+        log.info("SU will start...")
         while 1:
             subreddits = self.db.get_subreddits_to_process()
             if subreddits:
