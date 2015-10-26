@@ -69,9 +69,10 @@ class SubredditProcessWorker(Process):
         len_posts, len_interested_posts = float(len(posts)), float(len(interested_posts))
 
         if len_posts == len_interested_posts or len_interested_posts == 0 or len_posts == 0:
-            next_time_step = float(time_step) * time_step_less_iteration_power
+            next_time_step = float(time_step) / time_step_less_iteration_power
         else:
             next_time_step = float(time_step) / (len_posts / len_interested_posts)
+
         log.info("for subreddit [%s] next time step is: %s second\nprevious time step is: %s" % (
             name, next_time_step, time_step))
         return next_time_step

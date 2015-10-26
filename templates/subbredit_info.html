@@ -110,48 +110,45 @@
 
                             <form action="{{url_for('add_subreddit')}}" method="POST">
                                 <div class="form-group">
-                                    <label for="{{ sbrdt_info['name'] }}_name">NAME BLYA!</label>
+                                    <label for="{{ sbrdt_info['name'] }}_name">Name</label>
                                     <input id="{{ sbrdt_info['name'] }}_name" name="name" value="{{sbrdt_info['name']}}"
                                            type="text"
                                            class="form-control"
                                            placeholder="funny">
-                                    <label for="{{ sbrdt_info['name'] }}_step">КОЛ-ВО СЕКУНД ЧЕРЕЗ КОТОРЫЕ НАЧНЕТСЯ
-                                        СЛЕДУЮЩИЙ СБОР</label>
+                                    <label for="{{ sbrdt_info['name'] }}_step">Time to next retrieve (time step)</label>
                                     <input id="{{ sbrdt_info['name'] }}_step" name="step" value="{{sbrdt_info['step']}}"
                                            type="text"
                                            class="form-control"
                                            placeholder="36000">
                                 </div>
                                 <div class="form-group">
-                                    <label for="{{ sbrdt_info['name'] }}_rate_min">MIN RATE BLYA!</label>
+                                    <label for="{{ sbrdt_info['name'] }}_rate_min">Min count of ups</label>
                                     <input id="{{ sbrdt_info['name'] }}_rate_min" name="rate_min"
                                            value="{{sbrdt_info['rate_min']}}"
                                            type="text"
                                            class="form-control"
                                            placeholder="0">
 
-                                    <label for="{{ sbrdt_info['name'] }}_rate_max">MAX RATE BLYA!</label>
+                                    <label for="{{ sbrdt_info['name'] }}_rate_max">Max count of ups</label>
                                     <input id="{{ sbrdt_info['name'] }}_rate_max" name="rate_max" type="text"
                                            class="form-control"
                                            placeholder="99999"
                                            value="{{ sbrdt_info['rate_max'] }}"
                                             >
 
-                                    <label for="{{ sbrdt_info['name'] }}_reposts_max">MAX REPOSTS BLYA!</label>
+                                    <label for="{{ sbrdt_info['name'] }}_reposts_max">Max count of reposts</label>
                                     <input id="{{ sbrdt_info['name'] }}_reposts_max" name="reposts_max" type="text"
                                            class="form-control"
                                            value="{{ sbrdt_info['reposts_max'] }}"
                                            placeholder="100">
 
-                                    <label for="{{ sbrdt_info['name'] }}_shift">SHIFT BLYA SKOKA SEKUND IDUT
-                                        LESOM!</label>
+                                    <label for="{{ sbrdt_info['name'] }}_shift">Shift from head at time</label>
                                     <input id="{{ sbrdt_info['name'] }}_shift" name="shift" type="text"
                                            class="form-control"
                                            placeholder="3600"
                                            value="{{ sbrdt_info['shift'] }}">
 
-                                    <label for="{{ sbrdt_info['name'] }}_time_min">TIME MIN BLYA! SHABLON -
-                                        XYEBLON</label>
+                                    <label for="{{ sbrdt_info['name'] }}_time_min">Min time of video</label>
                                     <input id="{{ sbrdt_info['name'] }}_time_min" name="time_min" type="text"
                                            class="form-control"
                                            value="{{sbrdt_info['time_min']}}"
