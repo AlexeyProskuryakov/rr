@@ -101,10 +101,10 @@ class DBHandler(object):
         return found
 
     def update_subreddit_params(self, name, subreddit_params, subreddit_info=None):
-        set = {"$set": {"params": subreddit_params}}
+        set = {"params": subreddit_params}
         if subreddit_info:
             set = dict(set, **subreddit_info)
-        self.subreddits.update_one({"name": name}, set)
+        self.subreddits.update_one({"name": name}, {"$set":set})
 
     def update_subreddit_info(self, name, info):
         self.subreddits.update_one({"name": name}, {"$set": info})
