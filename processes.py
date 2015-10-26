@@ -67,7 +67,8 @@ class SubredditProcessWorker(Process):
         name = subreddit.get("name")
         time_step = subreddit.get("time_step")
         len_posts, len_interested_posts = float(len(posts)), float(len(interested_posts))
-        if len_posts == len_interested_posts:
+
+        if len_posts == len_interested_posts or len_interested_posts == 0 or len_posts == 0:
             next_time_step = float(time_step) * time_step_less_iteration_power
         else:
             next_time_step = float(time_step) / (len_posts / len_interested_posts)
