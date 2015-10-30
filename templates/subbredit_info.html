@@ -115,8 +115,8 @@
                                            type="text"
                                            class="form-control"
                                            placeholder="funny">
-                                    <label for="{{ sbrdt_info['name'] }}_step">Time to next retrieve (time step)</label>
-                                    <input id="{{ sbrdt_info['name'] }}_step" name="step" value="{{sbrdt_info['step']}}"
+                                    <label for="{{ sbrdt_info['name'] }}_lrtime">Time to retrieve (from last post)</label>
+                                    <input id="{{ sbrdt_info['name'] }}_lrtime" name="lrtime" value="{{sbrdt_info['lrtime']}}"
                                            type="text"
                                            class="form-control"
                                            placeholder="36000">
@@ -141,12 +141,6 @@
                                            class="form-control"
                                            value="{{ sbrdt_info['reposts_max'] }}"
                                            placeholder="100">
-
-                                    <label for="{{ sbrdt_info['name'] }}_shift">Shift from head at time</label>
-                                    <input id="{{ sbrdt_info['name'] }}_shift" name="shift" type="text"
-                                           class="form-control"
-                                           placeholder="3600"
-                                           value="{{ sbrdt_info['shift'] }}">
 
                                     <label for="{{ sbrdt_info['name'] }}_time_min">Min time of video</label>
                                     <input id="{{ sbrdt_info['name'] }}_time_min" name="time_min" type="text"

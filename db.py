@@ -67,7 +67,7 @@ class DBHandler(object):
         found = self.posts.find_one({"fullname": post_full_name})
         return found is not None
 
-    def is_post_video_id_is_present(self, video_id):
+    def is_post_video_id_present(self, video_id):
         found = self.posts.find_one({"video_id": video_id})
         return found is not None
 
@@ -109,15 +109,12 @@ class DBHandler(object):
     def update_subreddit_info(self, name, info):
         self.subreddits.update_one({"name": name}, {"$set": info})
 
-    def toggle_subreddit(self, name, next_time_step=None):
-        found = self.subreddits.find_one({"name": name})
-        if found:
-            step = next_time_step or found.get('time_step')
-            upd = {}
-            upd['last_update'] = time.time()
-            upd['next_update'] = time.time() + step
-            upd['time_step'] = step
-            self.update_subreddit_info(name, upd)
+    def toggle_subreddit(self, name, next_time_step):
+        upd = {}
+        upd['last_update'] = time.time()
+        upd['next_update'] = time.time() + next_time_step
+        upd['time_step'] = next_time_step
+        self.update_subreddit_info(name, upd)
 
     def get_subreddits_to_process(self):
         result = []

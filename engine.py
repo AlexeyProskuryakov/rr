@@ -32,6 +32,7 @@ def to_show(el):
     result = el.__dict__
     result['fullname'] = full_name
     result["video_id"] = retrieve_video_id(el.url)
+    result["created_utc"] = el.created_utc
     result["subreddit"] = el.subreddit.display_name
     return result
 
@@ -80,7 +81,6 @@ def to_save(post):
             "subreddit": post.get("subreddit"),
             "fullname": post.get("fullname"),
             "reposts_count": post.get("reposts_count"),
-            "created_utc": post.get("created_utc"),
             "created_dt": datetime.fromtimestamp(post.get("created_utc")),
             }
 
@@ -122,14 +122,14 @@ class Retriever(object):
             if ups_count < ups_max:
                 video_id = post.get("video_id")
                 if video_id:
-                    if time_min:
+                    if time_min and to_seconds(parse_time(time_min)):
+                        time_min_ = to_seconds(parse_time(time_min))
                         video_time = youtube.get_time(video_id)
-                        if video_time and to_seconds(parse_time(time_min)) > to_seconds(video_time):
+                        if video_time and time_min_ > to_seconds(video_time):
                             post["time"] = video_time
                         else:
                             add_stat("little_time")
                             return
-
                     try:
                         repost_count = get_reposts_count(video_id)
                         if repost_count < rp_max:
@@ -161,27 +161,19 @@ class Retriever(object):
         :param params:
         :return:
         """
-        time_min = params.get('time_min') or properties.default_time_min
-        result_acc = set()
+        time_min = params.get('time_min', None) or properties.default_time_min
         if not posts:
             log.error("no posts")
             return
 
         for post in posts:
-            create_time = post.get("created_utc")
-            if create_time + params.get('shift', 0) < time.time() and create_time > params.get('last_update', 0):
-                post = self.process_post(post,
-                                         params.get('reposts_max', 0),
-                                         params.get('rate_min', 0),
-                                         params.get('rate_max', 99999),
-                                         time_min)
-                if post is not None:
-                    post_id = post.get("id")
-                    if post_id in result_acc:
-                        continue
-
-                    result_acc.add(post_id)
-                    yield to_save(post)
+            post = self.process_post(post,
+                                     params.get('reposts_max'),
+                                     params.get('rate_min'),
+                                     params.get('rate_max'),
+                                     time_min)
+            if post is not None:
+                yield to_save(post)
 
 
 if __name__ == '__main__':

@@ -1,9 +1,10 @@
+# coding=utf-8
 import logging
 from multiprocessing import Process
 from time import sleep
 from db import DBHandler
 from engine import Retriever, reddit_get_new, get_current_step, to_save
-from properties import min_update_period, time_step_less_iteration_power
+from properties import min_update_period, time_step_less_iteration_power, min_time_step, max_time_step
 
 __author__ = 'alesha'
 
@@ -22,9 +23,9 @@ class SubredditProcessWorker(Process):
     def run(self):
         log.info("SPW will start...")
         while 1:
+            task = self.tq.get()
+            name = task.get("name")
             try:
-                task = self.tq.get()
-                name = task.get("name")
                 subreddit = self.db.get_subreddit(name)
                 if not subreddit:
                     log.error("not subreddit of this name %s", name)
@@ -32,21 +33,31 @@ class SubredditProcessWorker(Process):
 
                 try:
                     posts = reddit_get_new(name)
+                    if not posts:
+                        raise Exception("no posts :( ")
                 except Exception as e:
                     self.db.update_subreddit_info(name, {"error": e.message})
                     log.error("can not find any posts for %s" % name)
                     continue
-                # if part of loaded posts was persisted we skip this part
-                interested_posts = []
-                for post in posts:
-                    subreddit_head_id = subreddit.get("head_post_id")
-                    if subreddit_head_id and post.get("fullname") == subreddit_head_id:
-                        break
 
-                    if not self.db.is_post_video_id_is_present(post.get("video_id")):
-                        interested_posts.append(post)
+                log.info("SPW for %s retrieved: %s posts" % (name, len(posts)))
+                interested_posts = []
+                interested_posts_ids = []
 
                 params = subreddit.get("params")
+                lrtime = params.get("lrtime")
+                first_post_created = posts[-1].get("created_utc")
+                # отсеиваем посты, те которые более новые и те виде_ид которые уже есть
+                for post in reversed(posts):
+                    created_time = post.get("created_utc")
+                    if (created_time - first_post_created) < lrtime:
+                        if not self.db.is_post_video_id_present(post.get("video_id")):
+                            interested_posts.append(post)
+
+                        interested_posts_ids.append(post.get("fullname"))
+                    else:
+                        break
+
                 for post in self.retriever.process_subreddit(interested_posts, params):
                     self.db.save_post(post)
 
@@ -54,28 +65,44 @@ class SubredditProcessWorker(Process):
                 self.db.update_subreddit_info(name, {"time_window": time_window,
                                                      "count_all_posts": len(posts),
                                                      "statistics": self.retriever.statistics_cache[name],
-                                                     "head_post_id": posts[0].get("fullname")})
+                                                     "head_post_id": interested_posts_ids[0]})
 
-                next_time_step = self.ensure_time_step(subreddit, posts, interested_posts)
-                self.db.toggle_subreddit(name, next_time_step=next_time_step)
+                next_time_step = ensure_time_step(subreddit.get("head_post_id"),
+                                                  first_post_created,
+                                                  lrtime,
+                                                  interested_posts_ids,
+                                                  posts)
+
+                log.info("SPW for %s next time step will be: %s" % (name, next_time_step))
+                self.db.toggle_subreddit(name, next_time_step)
+
             except Exception as e:
-                log.exception(e)
+                log.exception("exception with task for subreddit: {%s}\n%s", name, e)
                 sleep(1)
                 continue
 
-    def ensure_time_step(self, subreddit, posts, interested_posts):
-        name = subreddit.get("name")
-        time_step = subreddit.get("time_step")
-        len_posts, len_interested_posts = float(len(posts)), float(len(interested_posts))
 
-        if len_posts == len_interested_posts or len_interested_posts == 0 or len_posts == 0:
-            next_time_step = float(time_step) / time_step_less_iteration_power
-        else:
-            next_time_step = float(time_step) / (len_posts / len_interested_posts)
+def ensure_time_step(head_post_id, first_post_created, lrtime, interested_posts_ids, posts):
+    # уменьшаем время следующей загрузки если идентификатор последнего поста в заданном
+    # интервале выгрузки. Иначе увеличиваем
+    next_time_step = lrtime
+    if head_post_id in interested_posts_ids:
+        # getting time = first_post <-> post with previous head_id
+        for post in posts:
+            if post.get("fullname") == head_post_id:
+                time_to_increase = post.get("created_utc") - first_post_created
+                next_time_step += time_to_increase
+                break
+    else:
+        next_time_step -= next_time_step / 4
 
-        log.info("for subreddit [%s] next time step is: %s second\nprevious time step is: %s" % (
-            name, next_time_step, time_step))
-        return next_time_step
+    # crop this time between min and max
+    if next_time_step < min_time_step:
+        next_time_step = min_time_step
+    elif next_time_step > max_time_step:
+        next_time_step = max_time_step
+
+    return next_time_step
 
 
 class SubredditUpdater(Process):

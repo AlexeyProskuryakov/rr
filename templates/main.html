@@ -32,31 +32,27 @@
 
                                 <form action="{{ url_for('add_subreddit') }}" method="POST">
                                     <div class="form-group">
-                                        <label for="name">NAME BLYA!</label>
+                                        <label for="name">Имя сабреддита</label>
                                         <input id="name" name="name" type="text" class="form-control"
                                                placeholder="funny">
-                                        <label for="step">КОЛ-ВО СЕКУНД ЧЕРЕЗ КОТОРЫЕ НАЧНЕТСЯ СЛЕДУЮЩИЙ СБОР</label>
-                                        <input id="step" name="step" type="text" class="form-control"
-                                               placeholder="36000">
+                                        <label for="lrtime">Время за которое извлекать посты с конца выборки</label>
+                                        <input id="lrtime" name="lrtime" type="text" class="form-control"
+                                               placeholder="1800">
                                     </div>
                                     <div class="form-group">
-                                        <label for="rate_min">MIN RATE BLYA!</label>
+                                        <label for="rate_min">Минимальный рейтинг</label>
                                         <input id="rate_min" name="rate_min" type="text" class="form-control"
                                                placeholder="0">
 
-                                        <label for="rate_max">MAX RATE BLYA!</label>
+                                        <label for="rate_max">Максимальный рейтинг</label>
                                         <input id="rate_max" name="rate_max" type="text" class="form-control"
                                                placeholder="99999">
 
-                                        <label for="reposts_max">MAX REPOSTS BLYA!</label>
+                                        <label for="reposts_max">Максимальное количество копий</label>
                                         <input id="reposts_max" name="reposts_max" type="text" class="form-control"
                                                placeholder="100">
 
-                                        <label for="shift">SHIFT BLYA SKOKA SEKUND IDUT LESOM!</label>
-                                        <input id="shift" name="shift" type="text" class="form-control"
-                                               placeholder="3600">
-
-                                        <label for="time_min">TIME MIN BLYA! SHABLON - XYEBLON</label>
+                                        <label for="time_min">Минимальное время видео (шаблон - хуеблон)</label>
                                         <input id="time_min" name="time_min" type="text" class="form-control"
                                                placeholder="PT0H1M30S">
 
@@ -210,11 +206,11 @@
                                                            type="text"
                                                            class="form-control"
                                                            placeholder="funny">
-                                                    <label for="{{ el['name'] }}_step">Time to next retrieve (time step)</label>
-                                                    <input id="{{ el['name'] }}_step" name="step" value="{{el['step']}}"
+                                                    <label for="{{ el['name'] }}_lrtime">Time to retrieve (from last post)</label>
+                                                    <input id="{{ el['name'] }}_lrtime" name="lrtime" value="{{el['lrtime']}}"
                                                            type="text"
                                                            class="form-control"
-                                                           placeholder="36000">
+                                                           placeholder="1800">
                                                 </div>
                                                 <div class="form-group">
                                                     <label for="{{ el['name'] }}_rate_min">Min count of ups</label>
@@ -237,12 +233,6 @@
                                                            class="form-control"
                                                            value="{{ el['reposts_max'] }}"
                                                            placeholder="100">
-
-                                                    <label for="{{ el['name'] }}_shift">Shift from head at time</label>
-                                                    <input id="{{ el['name'] }}_shift" name="shift" type="text"
-                                                           class="form-control"
-                                                           placeholder="3600"
-                                                           value="{{ el['shift'] }}">
 
                                                     <label for="{{ el['name'] }}_time_min">Min time of video</label>
                                                     <input id="{{ el['name'] }}_time_min" name="time_min" type="text"

@@ -32,6 +32,8 @@ mongo_uri = "mongodb://alesha:sederfes100500@ds035674.mongolab.com:35674/rr"
 default_time_min = "PT0H1M30S"
 
 min_update_period = 3600*24
-min_time_step = 3600
+min_time_step = 10
+max_time_step = 3600*5
+
 
 time_step_less_iteration_power = 0.85
