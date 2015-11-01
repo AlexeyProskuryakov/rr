@@ -2,12 +2,14 @@ from datetime import datetime
 import hashlib
 import logging
 import pymongo
+from pymongo import MongoClient
 import time
+
+from engine import get_interested_fields
 from properties import min_time_step
+import properties
 
 __author__ = 'alesha'
-from pymongo import MongoClient
-import properties
 
 log = logging.getLogger("DB")
 
@@ -33,6 +35,25 @@ class DBHandler(object):
         self.users = db['users']
         self.users.create_index([("name", pymongo.ASCENDING)], unique=True)
         self.users.create_index([("user_id", pymongo.ASCENDING)], unique=True)
+
+        self.raw_posts = db['raw_posts']
+        self.raw_posts.create_index([("subreddit", pymongo.ASCENDING)])
+
+    def add_raw_posts(self, sbrdt_name, posts):
+        found = self.raw_posts.find_one({"name": sbrdt_name})
+        if found:
+            self.raw_posts.delete_one({"name": sbrdt_name})
+
+        posts_ = map(lambda x: get_interested_fields(x, ["created_utc", "fullname", "video_id", "ups"]), posts)
+        self.raw_posts.insert_one({"name": sbrdt_name, "posts": posts_, "time": time.time()})
+
+    def get_raw_posts(self, sbrdt_name):
+        found = self.raw_posts.find_one({"name": sbrdt_name})
+        if found:
+            if (time.time() - found.get("time")) > properties.min_update_period:
+                self.raw_posts.delete_one({"name": sbrdt_name})
+                return None
+            return found.get("posts")
 
     def add_user(self, name, pwd, uid):
         log.info("add user %s %s %s" % (name, pwd, uid))
@@ -104,7 +125,7 @@ class DBHandler(object):
         set = {"params": subreddit_params}
         if subreddit_info:
             set = dict(set, **subreddit_info)
-        self.subreddits.update_one({"name": name}, {"$set":set})
+        self.subreddits.update_one({"name": name}, {"$set": set})
 
     def update_subreddit_info(self, name, info):
         self.subreddits.update_one({"name": name}, {"$set": info})
@@ -138,7 +159,7 @@ class DBHandler(object):
             el['count'] = self.posts.find({"subreddit": subreddit.get("name")}).count()
             el['time_window'] = subreddit.get("time_window")
             el['next_time_retrieve'] = datetime.fromtimestamp(subreddit.get('next_update'))
-            el['statistics'] = subreddit.get("statistics")
+            el['stat'] = subreddit.get("stat")
             el.update(subreddit.pop('params', {}))
             el.update(subreddit)
             result[el['name']] = el

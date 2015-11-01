@@ -1,5 +1,6 @@
 # coding=utf-8
 from flask import Flask, render_template, request, url_for, logging, session, g
+from flask.json import jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user
 from flask_debugtoolbar import DebugToolbarExtension
 
@@ -8,6 +9,7 @@ from uuid import uuid4
 from multiprocessing import Queue
 from werkzeug.utils import redirect
 from db import DBHandler
+from engine import reddit_get_new, get_interested_fields
 
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater
 import properties
@@ -166,7 +168,7 @@ def add_subreddit():
     params['lrtime'] = int(request.form.get("lrtime") or 1800)
     params['time_min'] = request.form.get("time_min") or properties.default_time_min
 
-    log.info("Add new subreddit with params: \n%s" % "\n".join(["%s : %s" % (k, v) for k, v in params.iteritems()]))
+    log.info("Add %s with params: \n%s" % (name, "\n".join(["%s : %s" % (k, v) for k, v in params.iteritems()])))
     db.add_subreddit(name, params, params['lrtime'])
     try:
         tq.put({"name": name})
@@ -176,11 +178,11 @@ def add_subreddit():
     return redirect(url_for('main'))
 
 
-@app.route("/subreddit/add_to_queue/<name>", methods=["GET"])
+@app.route("/subreddit/add_to_queue/<name>", methods=["POST"])
 @login_required
 def add_to_queue(name):
     tq.put({"name": name})
-    return redirect(url_for('main'))
+    return jsonify(**{"ok": True})
 
 
 @app.route("/subreddit/del", methods=["POST"])
@@ -200,7 +202,7 @@ def info_subreddit(name):
     sbrdt_info = db.get_subreddists_statistic()[name]
     return render_template("subbredit_info.html", **{"username": user.name,
                                                      "posts": posts,
-                                                     "sbrdt_info": sbrdt_info})
+                                                     "el": sbrdt_info, })
 
 
 @app.route("/", methods=["GET"])
@@ -209,7 +211,38 @@ def main():
     user = g.user
     result = db.get_subreddists_statistic()
     return render_template("main.html", **{"username": user.name,
-                                           "result": result})
+                                           "result": result,
+                                           "go": True})
+
+
+@app.route("/chart/<name>", methods=["GET"])
+@login_required
+def get_chart_data(name):
+    loaded = db.get_posts_of_subreddit(name)
+    all = db.get_raw_posts(name)
+    if not all:
+        all = reddit_get_new(name)
+        db.add_raw_posts(name, all)
+
+    first_element = all[-1]
+    fe_time = first_element.get("created_utc")
+
+    def post_chart_data(post):
+        return [int(post.get("created_utc") - fe_time), post.get("ups")]
+
+    def get_info(posts):
+        return [(int(post.get("created_utc") - fe_time), "%s\n%s" % (post.get("fullname"), post.get("video_id"))) for
+                post in
+                posts]
+
+    info = dict(get_info(all), **dict(get_info(loaded)))
+
+    data = {"series": [
+        {"label": "loaded", "data": [post_chart_data(post) for post in loaded]},
+        {"label": "all", "data": [post_chart_data(post) for post in all]},
+    ],
+        "info": info}
+    return jsonify(**data)
 
 
 spw = SubredditProcessWorker(tq, rq, db)

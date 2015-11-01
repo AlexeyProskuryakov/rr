@@ -17,6 +17,13 @@ reddit.login("4ikist", "sederfes", disable_warning=True)
 log.info("reddit is connected")
 
 
+def get_interested_fields(source, fields):
+    result = {}
+    for field in fields:
+        result[field] = source.get(field)
+    return result
+
+
 def retrieve_video_id(url):
     rules = {"www.youtube.com": re.compile("v\=(?P<id>[-_a-zA-Z0-9]+)&?"),
              "youtu.be": re.compile("\.be\/(?P<id>[-_a-zA-Z0-9]+)")
@@ -34,6 +41,7 @@ def to_show(el):
     result["video_id"] = retrieve_video_id(el.url)
     result["created_utc"] = el.created_utc
     result["subreddit"] = el.subreddit.display_name
+    result["ups"] = el.ups
     return result
 
 
@@ -85,41 +93,26 @@ def to_save(post):
             }
 
 
-class Retriever(object):
-    def __init__(self):
-        self.statistics_cache = {"little_ups": 0, "little_time": 0, "big_reposts_count": 0, "not_video": 0,
-                                 "big_ups": 0}
-        self.bad_cache = set()
-
-    def update_posts(self, fullnames):
+def update_posts(fullnames):
         names = []
         for name in fullnames:
             if name.startswith("t1") or name.startswith("t3") or name.startswith("t5"):
                 names.append(name)
         return update_post(fullnames)
 
-    def _add_statistic_inc(self, subreddit, post_id, name_param):
-        self.bad_cache.add(post_id)
-        stat = self.statistics_cache.get(subreddit)
-        if not stat:
-            stat = dict(**self.statistics_cache)
+class Retriever(object):
+    def __init__(self, stat = None):
+        self.sbrdt_statistic = stat or {}
 
-        param_val = stat.get(name_param, 0)
-        if param_val is None:
-            log.error("statistic param not found")
-            return
-        else:
-            stat[name_param] = param_val + 1
-
-        self.statistics_cache[subreddit] = stat
+    def _add_statistic_inc(self, name_subreddit, name_param):
+        param_val = self.sbrdt_statistic.get(name_param, 0)
+        self.sbrdt_statistic[name_param] = param_val + 1
 
     def process_post(self, post, rp_max, ups_min, ups_max, time_min):
-        if post.get("id") in self.bad_cache:
-            return
         add_stat = partial(self._add_statistic_inc, post.get("subreddit"), post.get("id"))
         ups_count = int(post.get("ups"))
-        if ups_count > ups_min:
-            if ups_count < ups_max:
+        if ups_count >= ups_min:
+            if ups_count <= ups_max:
                 video_id = post.get("video_id")
                 if video_id:
                     if time_min and to_seconds(parse_time(time_min)):
@@ -130,9 +123,10 @@ class Retriever(object):
                         else:
                             add_stat("little_time")
                             return
+
                     try:
                         repost_count = get_reposts_count(video_id)
-                        if repost_count < rp_max:
+                        if repost_count <= rp_max:
                             post["reposts_count"] = repost_count
                             return post
                         else:
@@ -140,13 +134,20 @@ class Retriever(object):
                     except Exception as e:
                         log.error(e)
 
-
                 else:
                     add_stat("not_video")
             else:
                 add_stat("big_ups")
         else:
             add_stat("little_ups")
+
+    @property
+    def statistic(self):
+        """
+        :return: statistic for current process subreddit. You must get tis every time
+        after using process subreddit/
+        """
+        return self.sbrdt_statistic
 
     def process_subreddit(self, posts, params):
         """

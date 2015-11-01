@@ -3,7 +3,7 @@ import logging
 from multiprocessing import Process
 from time import sleep
 from db import DBHandler
-from engine import Retriever, reddit_get_new, get_current_step, to_save
+from engine import Retriever, reddit_get_new, get_current_step, to_save, update_posts
 from properties import min_update_period, time_step_less_iteration_power, min_time_step, max_time_step
 
 __author__ = 'alesha'
@@ -17,7 +17,7 @@ class SubredditProcessWorker(Process):
         self.tq = tq
         self.rq = rq
         self.db = db
-        self.retriever = Retriever()
+
         log.info("SPW inited...")
 
     def run(self):
@@ -26,6 +26,7 @@ class SubredditProcessWorker(Process):
             task = self.tq.get()
             name = task.get("name")
             try:
+                self.db.update_subreddit_info(name, {"error": "All ok"})
                 subreddit = self.db.get_subreddit(name)
                 if not subreddit:
                     log.error("not subreddit of this name %s", name)
@@ -33,14 +34,14 @@ class SubredditProcessWorker(Process):
 
                 try:
                     posts = reddit_get_new(name)
+                    self.db.add_raw_posts(name, posts)
                     if not posts:
                         raise Exception("no posts :( ")
                 except Exception as e:
-                    self.db.update_subreddit_info(name, {"error": e.message})
+                    self.db.update_subreddit_info(name, {"error": str(e)})
                     log.error("can not find any posts for %s" % name)
                     continue
 
-                log.info("SPW for %s retrieved: %s posts" % (name, len(posts)))
                 interested_posts = []
                 interested_posts_ids = []
 
@@ -58,13 +59,20 @@ class SubredditProcessWorker(Process):
                     else:
                         break
 
-                for post in self.retriever.process_subreddit(interested_posts, params):
+                count = 0
+                stat = subreddit.get("stat")
+                retriever = Retriever(stat)
+                for post in retriever.process_subreddit(interested_posts, params):
+                    count+=1
                     self.db.save_post(post)
+
+                log.info("SPW for %s retrieved: %s posts \n interested posts: (%s) \n added: %s" % (name, len(posts), len(interested_posts), count))
 
                 time_window = get_current_step(posts)
                 self.db.update_subreddit_info(name, {"time_window": time_window,
                                                      "count_all_posts": len(posts),
-                                                     "statistics": self.retriever.statistics_cache[name],
+                                                     "count_interested_posts": len(interested_posts),
+                                                     "stat": retriever.statistic,
                                                      "head_post_id": interested_posts_ids[0]})
 
                 next_time_step = ensure_time_step(subreddit.get("head_post_id"),
@@ -127,7 +135,6 @@ class PostUpdater(Process):
     def __init__(self, db):
         super(PostUpdater, self).__init__()
         self.db = db
-        self.retriever = Retriever()
 
     def run(self):
         log.info("PU will start...")
@@ -146,10 +153,11 @@ class PostUpdater(Process):
                             subreddits[subreddit] = sbrdt_params
                     posts_fullnames.append(post.get("fullname"))
 
-                posts = self.retriever.update_posts(posts_fullnames)
+                posts = update_posts(posts_fullnames)
                 for post in posts:
                     sbrdt_params = subreddits.get(post.get("subreddit"))
-                    processed_post = self.retriever.process_post(post,
+                    retriever = Retriever()
+                    processed_post = retriever.process_post(post,
                                                                  sbrdt_params.get("reposts_max"),
                                                                  sbrdt_params.get("rate_min"),
                                                                  sbrdt_params.get("rate_max"),

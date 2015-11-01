@@ -17,3 +17,12 @@ table.sortable thead {
     text-align: center;
     width: 25px;
 }
+
+#posts-chart{
+	width: 1750px;
+	height: 250px;
+	}
+
+.legend{
+	font-size: 7pt; /* Размер шрифта в пунктах */
+}
