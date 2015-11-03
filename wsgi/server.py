@@ -1,20 +1,18 @@
 # coding=utf-8
+from uuid import uuid4
+from multiprocessing import Queue
+import os
+
 from flask import Flask, render_template, request, url_for, logging, session, g
 from flask.json import jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user
 from flask_debugtoolbar import DebugToolbarExtension
-
-from datetime import datetime
-from uuid import uuid4
-from multiprocessing import Queue
 from werkzeug.utils import redirect
-from db import DBHandler
-from engine import reddit_get_new, get_interested_fields
 
+from db import DBHandler
+from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 import properties
-import os
-from properties import min_time_step
 
 __author__ = '4ikist'
 

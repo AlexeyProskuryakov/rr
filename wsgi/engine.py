@@ -1,13 +1,13 @@
 from functools import partial
 import logging
-import properties
-from youtube import parse_time, to_seconds
-
 from datetime import datetime
 import time
+import re
 
 import praw
-import re
+
+import properties
+from youtube import parse_time, to_seconds
 import youtube
 
 log = logging.getLogger("engine")

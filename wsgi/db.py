@@ -1,9 +1,10 @@
 from datetime import datetime
 import hashlib
 import logging
+import time
+
 import pymongo
 from pymongo import MongoClient
-import time
 
 from engine import get_interested_fields
 from properties import min_time_step
