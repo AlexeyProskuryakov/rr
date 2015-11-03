@@ -33,6 +33,7 @@ def retrieve_video_id(url):
             for res in rule_reg.findall(url):
                 return res
 
+COUNT = 10000
 
 def to_show(el):
     full_name = el.fullname
@@ -44,21 +45,48 @@ def to_show(el):
     result["ups"] = el.ups
     return result
 
+def to_save(post):
+    return {"video_id": post.get("video_id"),
+            "video_url": post.get("url"),
+            "title": post.get("title"),
+            "ups": post.get("ups"),
+            "reddit_url": post.get("permalink"),
+            "subreddit": post.get("subreddit"),
+            "fullname": post.get("fullname"),
+            "reposts_count": post.get("reposts_count"),
+            "created_dt": datetime.fromtimestamp(post.get("created_utc")),
+            "created_utc": post.get("created_utc")
+            }
 
-COUNT = 10000
+
+def net_tryings(fn):
+    def wrapped(*args, **kwargs):
+        count = 0
+        while 1:
+            try:
+                result = fn(*args, **kwargs)
+                return result
+            except Exception as e:
+                log.warning("can not load data for [%s]\n args: %s, kwargs: %s \n because %s" % (fn, args, kwargs, e))
+                if count >= properties.tryings_count:
+                    raise e
+                time.sleep(properties.step_time_after_trying)
+                count += 1
+
+    return wrapped
 
 
+@net_tryings
 def reddit_get_new(subreddit_name):
     result = []
     sbrdt = reddit.get_subreddit(subreddit_name)
-
     for el in sbrdt.get_new(limit=COUNT, count=COUNT):
         data = to_show(el)
         result.append(data)
-
     return result
 
 
+@net_tryings
 def get_reposts_count(video_id):
     count = 0
     for _ in reddit.search("url:%s" % video_id):
@@ -66,6 +94,7 @@ def get_reposts_count(video_id):
     return count
 
 
+@net_tryings
 def update_post(full_name):
     information = reddit.get_info(thing_id=full_name)
     if isinstance(information, list):
@@ -80,28 +109,18 @@ def get_current_step(posts):
     return dt.seconds
 
 
-def to_save(post):
-    return {"video_id": post.get("video_id"),
-            "video_url": post.get("url"),
-            "title": post.get("title"),
-            "ups": post.get("ups"),
-            "reddit_url": post.get("permalink"),
-            "subreddit": post.get("subreddit"),
-            "fullname": post.get("fullname"),
-            "reposts_count": post.get("reposts_count"),
-            "created_dt": datetime.fromtimestamp(post.get("created_utc")),
-            }
 
 
 def update_posts(fullnames):
-        names = []
-        for name in fullnames:
-            if name.startswith("t1") or name.startswith("t3") or name.startswith("t5"):
-                names.append(name)
-        return update_post(fullnames)
+    names = []
+    for name in fullnames:
+        if name.startswith("t1") or name.startswith("t3") or name.startswith("t5"):
+            names.append(name)
+    return update_post(fullnames)
+
 
 class Retriever(object):
-    def __init__(self, stat = None):
+    def __init__(self, stat=None):
         self.sbrdt_statistic = stat or {}
 
     def _add_statistic_inc(self, name_subreddit, name_param):
@@ -109,7 +128,7 @@ class Retriever(object):
         self.sbrdt_statistic[name_param] = param_val + 1
 
     def process_post(self, post, rp_max, ups_min, ups_max, time_min):
-        add_stat = partial(self._add_statistic_inc, post.get("subreddit"), post.get("id"))
+        add_stat = partial(self._add_statistic_inc, post.get("subreddit"))
         ups_count = int(post.get("ups"))
         if ups_count >= ups_min:
             if ups_count <= ups_max:

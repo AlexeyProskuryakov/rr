@@ -63,10 +63,11 @@ class SubredditProcessWorker(Process):
                 stat = subreddit.get("stat")
                 retriever = Retriever(stat)
                 for post in retriever.process_subreddit(interested_posts, params):
-                    count+=1
+                    count += 1
                     self.db.save_post(post)
 
-                log.info("SPW for %s retrieved: %s posts \n interested posts: (%s) \n added: %s" % (name, len(posts), len(interested_posts), count))
+                log.info("SPW for %s retrieved: %s posts \n interested posts: (%s) \n added: %s" % (
+                    name, len(posts), len(interested_posts), count))
 
                 time_window = get_current_step(posts)
                 self.db.update_subreddit_info(name, {"time_window": time_window,
@@ -131,6 +132,34 @@ class SubredditUpdater(Process):
             sleep(120)
 
 
+def update_stored_posts(db, posts):
+    posts_fullnames = []
+    subreddits = {}
+    for post in posts:
+        subreddit = post.get("subreddit")
+        if subreddit not in subreddits:
+            sbrdt = db.get_subreddit(subreddit)
+            sbrdt_params = sbrdt.get("params")
+            if sbrdt and sbrdt_params:
+                subreddits[subreddit] = sbrdt_params
+        posts_fullnames.append(post.get("fullname"))
+
+    posts = update_posts(posts_fullnames)
+
+    for post in posts:
+        sbrdt_params = subreddits.get(post.get("subreddit"))
+        retriever = Retriever()
+        processed_post = retriever.process_post(post,
+                                                sbrdt_params.get("reposts_max"),
+                                                sbrdt_params.get("rate_min"),
+                                                sbrdt_params.get("rate_max"),
+                                                None)
+        if processed_post:
+            db.update_post(to_save(processed_post))
+        else:
+            db.delete_post(post.get("fullname"), post.get("video_id"))
+
+
 class PostUpdater(Process):
     def __init__(self, db):
         super(PostUpdater, self).__init__()
@@ -139,33 +168,11 @@ class PostUpdater(Process):
     def run(self):
         log.info("PU will start...")
         while 1:
-            subreddits = {}
             for_update = self.db.get_posts_for_update()
-            log.info("will update %s posts...", for_update.count())
-            posts_fullnames = []
-            if for_update.count() > 0:
-                for post in for_update:
-                    subreddit = post.get("subreddit")
-                    if subreddit not in subreddits:
-                        sbrdt = self.db.get_subreddit(subreddit)
-                        sbrdt_params = sbrdt.get("params")
-                        if sbrdt and sbrdt_params:
-                            subreddits[subreddit] = sbrdt_params
-                    posts_fullnames.append(post.get("fullname"))
-
-                posts = update_posts(posts_fullnames)
-                for post in posts:
-                    sbrdt_params = subreddits.get(post.get("subreddit"))
-                    retriever = Retriever()
-                    processed_post = retriever.process_post(post,
-                                                                 sbrdt_params.get("reposts_max"),
-                                                                 sbrdt_params.get("rate_min"),
-                                                                 sbrdt_params.get("rate_max"),
-                                                                 None)
-                    if processed_post:
-                        self.db.update_post(to_save(processed_post))
-                    else:
-                        self.db.delete_post(post.get("fullname"), post.get("video_id"))
+            count = for_update.count()
+            if count > 0:
+                log.info("will update %s posts...", count)
+                update_stored_posts(self.db, for_update)
             sleep(min_update_period)
 
 

@@ -7,12 +7,20 @@ var refresh_sbrdt = function(sbrdt){
 	);
 };
 
+
+var post_change = function(fn, v_id, meth){
+	$.get(
+	"/post/"+meth+"/"+fn+"/"+v_id,
+	function(result){
+			console.log(result);
+			if (result['ok'] == true){
+				location.reload();
+			}
+		}
+	);
+};
+
 $(function(){
-
-
-
-
-
     var element = $("#posts-chart").get(0);
     if (element == undefined) {
     	return;

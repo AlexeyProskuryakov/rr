@@ -11,7 +11,7 @@ from werkzeug.utils import redirect
 from db import DBHandler
 from engine import reddit_get_new, get_interested_fields
 
-from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater
+from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 import properties
 import os
 from properties import min_time_step
@@ -205,6 +205,23 @@ def info_subreddit(name):
                                                      "el": sbrdt_info, })
 
 
+@app.route("/post/del/<fullname>/<video_id>", methods=["GET"])
+@login_required
+def del_post(fullname, video_id):
+    db.delete_post(fullname, video_id)
+    return jsonify(**{"ok": True})
+
+
+@app.route("/post/update/<fullname>/<video_id>", methods=["GET"])
+@login_required
+def update_post(fullname, video_id):
+    found = db.get_post(fullname, video_id)
+    if found:
+        update_stored_posts(db, [found])
+        return jsonify(**{"ok": True})
+    return jsonify(**{"ok": False, "detail": "Post %s %s not found" % (fullname, video_id)})
+
+
 @app.route("/", methods=["GET"])
 @login_required
 def main():
@@ -219,6 +236,7 @@ def main():
 @login_required
 def get_chart_data(name):
     loaded = db.get_posts_of_subreddit(name)
+    loaded_fns = set(map(lambda x: x.get("fullname"), loaded))
     all = db.get_raw_posts(name)
     if not all:
         all = reddit_get_new(name)
@@ -227,13 +245,19 @@ def get_chart_data(name):
     first_element = all[-1]
     fe_time = first_element.get("created_utc")
 
+    sbrdt = db.get_subreddit(name)
+    sbrdt_params = sbrdt.get("params")
+
+    all = filter(lambda x: x.get("video_id") is not None, all)
+    all = filter(lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"), all)
+    all = filter(lambda x: x.get("fullname") not in loaded_fns, all)
+
     def post_chart_data(post):
         return [int(post.get("created_utc") - fe_time), post.get("ups")]
 
     def get_info(posts):
         return [(int(post.get("created_utc") - fe_time), "%s\n%s" % (post.get("fullname"), post.get("video_id"))) for
-                post in
-                posts]
+                post in posts if post.get("created_utc")]
 
     info = dict(get_info(all), **dict(get_info(loaded)))
 

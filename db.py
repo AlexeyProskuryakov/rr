@@ -84,6 +84,10 @@ class DBHandler(object):
             post['updated'] = time.time()
             self.posts.insert_one(post)
 
+    def get_post(self, fullname, video_id):
+        found = self.posts.find_one({"fullname":fullname, "video_id":video_id})
+        return found
+
     def is_post_present(self, post_full_name):
         found = self.posts.find_one({"fullname": post_full_name})
         return found is not None
@@ -97,12 +101,18 @@ class DBHandler(object):
         self.posts.update_one({"fullname": post.get("fullname"), "video_id": post.get("video_id")}, {"$set": post})
 
     def delete_post(self, full_name, video_id):
-        self.posts.delete_one({"fullname": full_name, "video_id": video_id})
+        self.posts.update_one({"fullname": full_name, "video_id": video_id}, {"$set": {"deleted": time.time()}})
 
     def get_posts_for_update(self, min_update_period=properties.min_update_period):
         found = self.posts.find(
-            {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}]})
+            {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}],
+             "deleted": {"$exists": False}})
         return found
+
+    def get_posts_of_subreddit(self, name):
+        posts = [el for el in self.posts.find({"subreddit": name,
+                                               "deleted": {"$exists": False}})]
+        return posts
 
     def add_subreddit(self, subreddit_name, retrieve_params, time_step):
         found = self.subreddits.find_one({"name": subreddit_name})
@@ -156,7 +166,7 @@ class DBHandler(object):
         for subreddit in self.subreddits.find({}):
             el = {}
             el['name'] = subreddit.get("name")
-            el['count'] = self.posts.find({"subreddit": subreddit.get("name")}).count()
+            el['count'] = self.posts.find({"subreddit": subreddit.get("name"), "deleted": {"$exists": False}}).count()
             el['time_window'] = subreddit.get("time_window")
             el['next_time_retrieve'] = datetime.fromtimestamp(subreddit.get('next_update'))
             el['stat'] = subreddit.get("stat")
@@ -167,7 +177,3 @@ class DBHandler(object):
         self.statistics_cache['data'] = result
 
         return result
-
-    def get_posts_of_subreddit(self, name):
-        posts = [el for el in self.posts.find({"subreddit": name})]
-        return posts
