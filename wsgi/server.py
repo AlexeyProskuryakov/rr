@@ -17,7 +17,9 @@ import properties
 __author__ = '4ikist'
 
 log = logging.getLogger("web")
-app = Flask("rr")
+cur_dir = os.path.curdir
+print cur_dir
+app = Flask("rr", template_folder=cur_dir+"/templates")
 
 app.secret_key = 'fooooooo'
 app.config['SESSION_TYPE'] = 'filesystem'

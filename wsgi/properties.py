@@ -26,8 +26,6 @@ logger.addHandler(fh)
 logger.addHandler(ch)
 
 
-
-
 mongo_uri = "mongodb://alesha:sederfes100500@ds035674.mongolab.com:35674/rr"
 default_time_min = "PT0H1M30S"
 

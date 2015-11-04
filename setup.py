@@ -6,5 +6,4 @@ setup(name='RR',
       author='alesha',
       author_email='alexey.proskuryakov@gmail.com',
       url='http://www.python.org/sigs/distutils-sig/',
-#      install_requires=['Django>=1.3'],
      )
