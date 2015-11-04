@@ -17,8 +17,7 @@ import properties
 __author__ = '4ikist'
 
 log = logging.getLogger("web")
-cur_dir = os.path.curdir
-print cur_dir
+cur_dir = os.path.dirname(__file__)
 app = Flask("rr", template_folder=cur_dir + "/templates", static_folder=cur_dir + "/static")
 
 app.secret_key = 'fooooooo'
@@ -137,11 +136,9 @@ def login():
         if user:
             try:
                 login_user(user, remember=remember_me)
-
                 return redirect(url_for("main"))
             except Exception as e:
                 log.exception(e)
-                return render_template("login.html")
 
     return render_template("login.html")
 
@@ -283,4 +280,5 @@ pu.daemon = True
 pu.start()
 
 if __name__ == '__main__':
+    print os.path.dirname(__file__)
     app.run(port=5000)
