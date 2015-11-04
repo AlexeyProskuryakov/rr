@@ -19,7 +19,7 @@ __author__ = '4ikist'
 log = logging.getLogger("web")
 cur_dir = os.path.curdir
 print cur_dir
-app = Flask("rr", template_folder=cur_dir+"/templates")
+app = Flask("rr", template_folder=cur_dir + "/templates", static_folder=cur_dir + "/static")
 
 app.secret_key = 'fooooooo'
 app.config['SESSION_TYPE'] = 'filesystem'
@@ -249,7 +249,8 @@ def get_chart_data(name):
     sbrdt_params = sbrdt.get("params")
 
     all = filter(lambda x: x.get("video_id") is not None, all)
-    all = filter(lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"), all)
+    all = filter(
+        lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"), all)
     all = filter(lambda x: x.get("fullname") not in loaded_fns, all)
 
     def post_chart_data(post):
