@@ -44,3 +44,10 @@ def get_time(video_id):
             return d
     return None
 
+
+
+if __name__ == '__main__':
+    result = get_time("9O5jf3CWTiA")
+    print parse_time("PT0H1M12S")
+    print parse_time("pt0h1m12s")
+    print result

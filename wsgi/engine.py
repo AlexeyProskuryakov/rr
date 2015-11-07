@@ -135,9 +135,9 @@ class Retriever(object):
                 video_id = post.get("video_id")
                 if video_id:
                     if time_min and to_seconds(parse_time(time_min)):
-                        time_min_ = to_seconds(parse_time(time_min))
+                        time_min_seconds = to_seconds(parse_time(time_min))
                         video_time = youtube.get_time(video_id)
-                        if video_time and time_min_ > to_seconds(video_time):
+                        if video_time and to_seconds(video_time) > time_min_seconds:
                             post["time"] = video_time
                         else:
                             add_stat("little_time")
