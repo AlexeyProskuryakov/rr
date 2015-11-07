@@ -60,8 +60,7 @@ class SubredditProcessWorker(Process):
                         break
 
                 count = 0
-                stat = subreddit.get("stat")
-                retriever = Retriever(stat)
+                retriever = Retriever()
                 for post in retriever.process_subreddit(interested_posts, params):
                     count += 1
                     self.db.save_post(post)
