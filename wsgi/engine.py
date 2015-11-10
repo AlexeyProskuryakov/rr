@@ -3,9 +3,7 @@ import logging
 from datetime import datetime
 import time
 import re
-
 import praw
-
 import properties
 from youtube import parse_time, to_seconds
 import youtube
@@ -33,7 +31,9 @@ def retrieve_video_id(url):
             for res in rule_reg.findall(url):
                 return res
 
+
 COUNT = 10000
+
 
 def to_show(el):
     full_name = el.fullname
@@ -45,6 +45,7 @@ def to_show(el):
     result["ups"] = el.ups
     return result
 
+
 def to_save(post):
     return {"video_id": post.get("video_id"),
             "video_url": post.get("url"),
@@ -55,7 +56,8 @@ def to_save(post):
             "fullname": post.get("fullname"),
             "reposts_count": post.get("reposts_count"),
             "created_dt": datetime.fromtimestamp(post.get("created_utc")),
-            "created_utc": post.get("created_utc")
+            "created_utc": post.get("created_utc"),
+            "comments_count": post.get("num_comments")
             }
 
 
@@ -67,6 +69,7 @@ def net_tryings(fn):
                 result = fn(*args, **kwargs)
                 return result
             except Exception as e:
+                log.exception(e)
                 log.warning("can not load data for [%s]\n args: %s, kwargs: %s \n because %s" % (fn, args, kwargs, e))
                 if count >= properties.tryings_count:
                     raise e
@@ -95,6 +98,16 @@ def get_reposts_count(video_id):
 
 
 @net_tryings
+def reddit_search(query):
+    result = []
+    for post in reddit.search(query, limit=COUNT, count=COUNT):
+        post_info = to_save(to_show(post))
+        post_info.pop("reposts_count")
+        result.append(post_info)
+    return result
+
+
+@net_tryings
 def update_post(full_name):
     information = reddit.get_info(thing_id=full_name)
     if isinstance(information, list):
@@ -107,8 +120,6 @@ def update_post(full_name):
 def get_current_step(posts):
     dt = datetime.fromtimestamp(posts[0].get("created_utc")) - datetime.fromtimestamp(posts[-1].get("created_utc"))
     return dt.seconds
-
-
 
 
 def update_posts(fullnames):

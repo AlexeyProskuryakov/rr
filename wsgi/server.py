@@ -2,17 +2,16 @@
 from uuid import uuid4
 from multiprocessing import Queue
 import os
-
 from flask import Flask, render_template, request, url_for, logging, session, g
 from flask.json import jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user
 from flask_debugtoolbar import DebugToolbarExtension
 from werkzeug.utils import redirect
-
 from db import DBHandler
 from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 import properties
+from wsgi.engine import reddit_search
 
 __author__ = '4ikist'
 
@@ -267,17 +266,28 @@ def get_chart_data(name):
     return jsonify(**data)
 
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
+@app.route("/experiment/search", methods=["GET", "POST"])
+@login_required
+def ex_search():
+    if request.method == "POST":
+        q = request.form.get("q")
+        result = reddit_search(q)
+        if len(result):
+            return render_template("ex_search.html", **{"heads": result[0].keys(), "posts": result, "content_present":True, "count":len(result)})
+    return render_template("ex_search.html", **{"content_present":False})
 
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
 
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)

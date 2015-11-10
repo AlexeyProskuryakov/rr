@@ -1,0 +1,55 @@
+{% extends "layout.html" %}
+{% block body %}
+
+{% block content %}
+
+<form method="POST" action="/experiment/search">
+    <label for="q">
+        Your request query:
+    </label>
+    <input id="q" name="q" type="text">
+    <input type="submit">
+</form>
+<hr>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            {% if content_present %}
+            <span>
+                found {{count}} results...
+            </span>
+            <hr>
+            <table class="table table-striped">
+                <thead>
+                <tr>
+                    {% for head in heads %}
+                    <th>
+                        {{head}}
+                    </th>
+                    {% endfor %}
+                </tr>
+                </thead>
+                <tbody>
+                {% for post in posts %}
+                <tr>
+                    {% for head in heads %}
+                    <th>
+                        {{post[head]}}
+                    </th>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+        <span>
+            No content present :(
+        </span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% endblock %}
