@@ -277,17 +277,17 @@ def ex_search():
     return render_template("ex_search.html", **{"content_present":False})
 
 
-# spw = SubredditProcessWorker(tq, rq, db)
-# spw.daemon = True
-# spw.start()
-#
-# su = SubredditUpdater(tq, db)
-# su.daemon = True
-# su.start()
-#
-# pu = PostUpdater(db)
-# pu.daemon = True
-# pu.start()
+spw = SubredditProcessWorker(tq, rq, db)
+spw.daemon = True
+spw.start()
+
+su = SubredditUpdater(tq, db)
+su.daemon = True
+su.start()
+
+pu = PostUpdater(db)
+pu.daemon = True
+pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)
