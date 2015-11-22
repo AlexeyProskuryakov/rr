@@ -21,7 +21,7 @@
 
     </div>
     <div class="row">
-        <div class="alert alert-info" role="alert">Chart for all type posts of subreddit {{ name }} </div>
+        <div class="alert alert-info" role="alert">Chart for all type posts of subreddit <strong>{{ name }} </strong> <br> <a href="{{url_for('info_subreddit', name=name)}}"> Subreddit info >>></a></div>
         <div id="posts-chart" chart_for="{{ name }}"></div>
 
     </div>

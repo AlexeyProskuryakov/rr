@@ -3,13 +3,14 @@
 
 {% block content %}
 
-<a href="{{url_for('main')}}"><h1><<<<< Back to main</h1>
+<a href="{{url_for('main')}}"><h1><<<<< Back to main</h1><a href="{{url_for('search_result', name=el['name'])}}"><h2>Search results |||</h2></a>
 
 </a>
 <h1> [{{el['name']}}] info:</h1>
 <hr>
 <div id="posts-chart" chart_for="{{ el['name'] }}"></div>
 <div id="posts-params-chart" chart_for="{{ el['name'] }}"></div>
+
 <table class="table table-striped">
     <thead>
     <tr>
