@@ -14,7 +14,7 @@ from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 import properties
 from wsgi.engine import reddit_search, Retriever
-from wsgi.properties import SRC_SEARCH
+from wsgi.properties import SRC_SEARCH, SRC_OBSERV
 
 __author__ = '4ikist'
 
@@ -236,7 +236,7 @@ def main():
 @app.route("/chart/<name>", methods=["GET"])
 @login_required
 def get_chart_data(name):
-    loaded = db.get_posts_of_subreddit(name)
+    loaded = db.get_posts_of_subreddit(name, SRC_OBSERV)
     loaded_fns = set(map(lambda x: x.get("fullname"), loaded))
     all = db.get_raw_posts(name)
     if not all:
@@ -259,6 +259,12 @@ def get_chart_data(name):
     def post_chart_data(post):
         return [int(post.get("created_utc") - fe_time), post.get("ups")]
 
+    def post_comments_data(post):
+        return [int(post.get("created_utc") - fe_time), post.get("comments_count")]
+
+    def post_copies_data(post):
+        return [int(post.get("created_utc") - fe_time), post.get("reposts_count")]
+
     def get_info(posts):
         return [(int(post.get("created_utc") - fe_time), "%s\n%s" % (post.get("fullname"), post.get("video_id"))) for
                 post in posts if post.get("created_utc")]
@@ -270,6 +276,10 @@ def get_chart_data(name):
         {"label": "all", "data": [post_chart_data(post) for post in all]},
         {"label": SRC_SEARCH, "data": [post_chart_data(post) for post in search]}
     ],
+        "series_prms":[
+            {"label":"comment_counts", "data":[post_comments_data(post) for post in loaded + search]},
+            {"label":"copies_count", "data":[post_comments_data(post) for post in loaded + search]},
+        ],
         "info": info}
     return jsonify(**data)
 
@@ -298,7 +308,7 @@ def search_result(name):
     posts = db.get_posts_of_subreddit(name, SRC_SEARCH)
     count = len(posts)
     return render_template("search.html", **{"params": p, "statistic": s, "posts": posts, "content_present": count > 0,
-                                                 "count": count, "name":name})
+                                             "count": count, "name": name})
 
 
 @app.route("/search/load", methods=["POST"])
@@ -335,15 +345,16 @@ def search_load():
         posts = reddit_search(query)
         posts = filter(
             lambda x: (before - x.get("created_dt")).total_seconds() > 0 and x.get("video_id") not in video_ids, posts)
-        posts = filter(
-            lambda x: not db.is_post_video_id_present(x.get("video_id")), posts
-        )
         cur_v_ids = set(map(lambda x: x.get("video_id"), posts))
-        difference = len(cur_v_ids.difference(video_ids))
-        log.info("New posts: %s" % difference)
+        difference = cur_v_ids.difference(video_ids)
+        difference = filter(
+            lambda x: not db.is_post_video_id_present(x), difference
+        )
+
+        log.info("New posts: %s" % len(difference))
         if difference:
-            map(lambda x: video_ids.add(x.get("video_id")), posts)
-            all_posts.extend(posts)
+            map(lambda x: video_ids.add(x), difference)
+            all_posts.extend([el for el in posts if el['video_id'] in difference])
         elif len(video_ids) > 0:
             break
 
@@ -357,17 +368,17 @@ def search_load():
     return jsonify(**{"ok": True, "name": name})
 
 
-# spw = SubredditProcessWorker(tq, rq, db)
-# spw.daemon = True
-# spw.start()
-#
-# su = SubredditUpdater(tq, db)
-# su.daemon = True
-# su.start()
-#
-# pu = PostUpdater(db)
-# pu.daemon = True
-# pu.start()
+spw = SubredditProcessWorker(tq, rq, db)
+spw.daemon = True
+spw.start()
+
+su = SubredditUpdater(tq, db)
+su.daemon = True
+su.start()
+
+pu = PostUpdater(db)
+pu.daemon = True
+pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)

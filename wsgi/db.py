@@ -126,6 +126,8 @@ class DBHandler(object):
         found = self.posts.find_one({"fullname": post_full_name})
         return found is not None
 
+
+
     def is_post_video_id_present(self, video_id):
         if self.cache.get(video_id):
             return True

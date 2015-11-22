@@ -27,13 +27,45 @@ var update_chart = function(name){
                 console.log("process response");
 
                 var series = result['series'];
+                var series_params = result['series_prms'];
                 var info_map = result['info'];
 
                 console.log(series);
+                console.log("sp::::",series_params);
                 console.log(info_map);
 
                 var plot = $.plot("#posts-chart",
                     series,
+                    {
+                        series: {
+                            lines: {
+                                show: false
+                            },
+                            points: {
+                                show: true
+                            }
+                        },
+                        grid: {
+                            hoverable: true,
+                            clickable: true
+                        },
+                        yaxis: {
+                            min: 0,
+                            max: 200,
+                        },
+                        zoom: {
+                            interactive: true
+                        },
+                        pan: {
+                            interactive: true
+                        },
+                        selection: {
+                            mode: "x"
+                        }
+                    }
+                );
+                var plot2 = $.plot("#posts-params-chart",
+                    series_params,
                     {
                         series: {
                             lines: {
@@ -85,6 +117,22 @@ var update_chart = function(name){
                 $("#posts-chart").bind("plotclick", function (event, pos, item) {
                         if (item) {
                             plot.highlight(item.series, item.datapoint);
+                        }
+                });
+
+                $("#posts-params-chart").bind("plothover", function (event, pos, item) {
+                        if (item) {
+                            $("#tooltip").html(info_map[item.datapoint[0]])
+                                .css({top: item.pageY+5, left: item.pageX+5})
+                                .fadeIn(200);
+                        } else {
+                            $("#tooltip").hide();
+                        }
+                    });
+
+                $("#posts-params-chart").bind("plotclick", function (event, pos, item) {
+                        if (item) {
+                            plot2.highlight(item.series, item.datapoint);
                         }
                 });
 

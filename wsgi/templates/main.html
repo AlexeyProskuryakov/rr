@@ -126,6 +126,7 @@
                 </div>
             </div>
             <div class="col-md-4">
+                <strong>Search results:</strong>
                 {% for sr in search_results_names %}
                 <a href="/search/result/{{ sr['_id'] }}">{{ sr['_id'] }}</a> ({{ sr['count'] }})
                 {% endfor %}
