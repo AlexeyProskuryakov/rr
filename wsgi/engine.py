@@ -15,6 +15,7 @@ reddit.login("4ikist", "sederfes", disable_warning=True)
 log.info("reddit is connected")
 
 
+
 def get_interested_fields(source, fields):
     result = {}
     for field in fields:
@@ -48,7 +49,7 @@ def to_show(el):
 
 def to_save(post):
     return {"video_id": post.get("video_id"),
-            "video_url": post.get("url"),
+            "video_url": post.get("url") or post.get("video_url"),
             "title": post.get("title"),
             "ups": post.get("ups"),
             "reddit_url": post.get("permalink"),
@@ -92,7 +93,7 @@ def reddit_get_new(subreddit_name):
 @net_tryings
 def get_reposts_count(video_id):
     count = 0
-    for _ in reddit.search("url:%s" % video_id):
+    for _ in reddit.search("url:\'%s\'" % video_id):
         count += 1
     return count
 

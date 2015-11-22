@@ -3,7 +3,7 @@
 
 {% block content %}
 
-<a href="{{url_for('main')}}"> <h1><<<<< Back to main</h1>
+<a href="{{url_for('main')}}"><h1><<<<< Back to main</h1>
 
 </a>
 <h1> [{{el['name']}}] info:</h1>
@@ -13,44 +13,44 @@
     <thead>
     <tr>
         <th>
-                            Name
-                        </th>
-                        <th>
-                            <table class="inner">
-                                <thead>
-                                <tr>
-                                    <th class="glyphicon glyphicon-chevron-up">
-                                    </th>
-                                    <th class="glyphicon glyphicon-chevron-down">
-                                    </th>
-                                    <th class="glyphicon glyphicon-eye-open">
-                                    </th>
-                                    <th class="glyphicon glyphicon-time">
-                                    </th>
-                                    <th class="glyphicon glyphicon-remove">
-                                    </th>
-                                </tr>
-                                </thead>
-                            </table>
-                        </th>
-                        <th>
-                            Next time retrieve
-                        </th>
-                        <th>
-                            Count retrieved
-                        </th>
-                        <th>
-                            Time window in retrieved
-                        </th>
-                        <th>
-                            Last batch retrieved
-                        </th>
-                        <th>
-                            Count interested
-                        </th>
-                        <th>
-                            Error?
-                        </th>
+            Name
+        </th>
+        <th>
+            <table class="inner">
+                <thead>
+                <tr>
+                    <th class="glyphicon glyphicon-chevron-up">
+                    </th>
+                    <th class="glyphicon glyphicon-chevron-down">
+                    </th>
+                    <th class="glyphicon glyphicon-eye-open">
+                    </th>
+                    <th class="glyphicon glyphicon-time">
+                    </th>
+                    <th class="glyphicon glyphicon-remove">
+                    </th>
+                </tr>
+                </thead>
+            </table>
+        </th>
+        <th>
+            Next time retrieve
+        </th>
+        <th>
+            Count retrieved
+        </th>
+        <th>
+            Time window in retrieved
+        </th>
+        <th>
+            Last batch retrieved
+        </th>
+        <th>
+            Count interested
+        </th>
+        <th>
+            Error?
+        </th>
     </tr>
     </thead>
     <tbody>
@@ -64,69 +64,12 @@
 <h1>
     POSTS:
 </h1>
-<table id="table" class="table table-striped sortable">
-    <thead>
-    <tr>
-        <th>
-            id
-        </th>
-        <th>
-            title
-        </th>
-        <th>
-            created dt
-        </th>
-        <th>
-            ups
-        </th>
-        <th>
-            reposts count
-        </th>
-        <th>
-            post id (fullname)
-        </th>
-    </tr>
-    </thead>
-    <tbody>
 
-    {% for post in posts %}
 
-    <tr>
-        <th>
-            <a href="{{post['video_url']}}" target="_blank"> {{ post['video_id'] }}</a>
-        </th>
-        <th>
-            <a href="{{post['reddit_url']}}" target="_blank">{{ post['title'] }}</a>
-        </th>
-        <th sorttable_customkey="{{post['created_utc']}}">
-            {{post['created_dt']}}
-        </th>
-        <th sorttable_customkey="{{post['ups']}}">
-            {{post['ups']}}
-        </th>
-        <th sorttable_customkey="{{post['reposts_count']}}">
-            {{post['reposts_count']}}
-        </th>
-        <th sorttable_customkey="{{post['fullname']}}">
-            {{post['fullname']}}
-        </th>
-        <th>
-            <btn onclick=post_change("{{post['fullname']}}","{{post['video_id']}}","update") class="btn btn-xs btn-success">
-            <span class="glyphicon glyphicon-refresh"></span>
-        </btn>
-        </th>
 
-        <th>
-            <btn onclick=post_change("{{post['fullname']}}","{{post['video_id']}}","del") class="btn btn-xs btn-danger">
-            <span class="glyphicon glyphicon-remove"></span>
-        </btn>
-        </th>
-    </tr>
+        {% include "partials/post_row.html"%}
 
-    {% endfor %}
-    </tbody>
 
-</table>
 {% endblock %}
 
 {% endblock %}

@@ -2,13 +2,13 @@ from datetime import datetime
 import hashlib
 import logging
 import time
-
 import pymongo
+from bson import SON
 from pymongo import MongoClient
-
 from engine import get_interested_fields
 from properties import min_time_step
 import properties
+from wsgi.properties import SRC_SEARCH
 
 __author__ = 'alesha'
 
@@ -26,6 +26,7 @@ class DBHandler(object):
         self.posts.create_index([("fullname", pymongo.ASCENDING), ("video_id", pymongo.DESCENDING)], unique=True)
         self.posts.create_index([("subreddit", pymongo.ASCENDING)])
         self.posts.create_index([("updated", pymongo.ASCENDING)])
+        self.posts.create_index([("source", pymongo.ASCENDING)])
 
         self.subreddits = db['subreddits']
         self.subreddits.create_index([("name", pymongo.ASCENDING)], unique=True)
@@ -39,6 +40,36 @@ class DBHandler(object):
 
         self.raw_posts = db['raw_posts']
         self.raw_posts.create_index([("subreddit", pymongo.ASCENDING)])
+
+        self.search_params = db['search_result']
+        self.search_params.create_index([("subreddit", pymongo.ASCENDING)])
+
+        self.cache = {}
+
+    def add_search_params(self, sbrdt_name, params, statistic):
+        ps = self.get_search_params(sbrdt_name)
+        if ps:
+            self.search_params.update_one({"subreddit": sbrdt_name},
+                                          {"$set": {"params": params, "statistic": statistic}})
+        else:
+            self.search_params.save({"subreddit": sbrdt_name, "params": params, "statistic": statistic})
+
+    def get_search_params(self, sbrdt_name):
+        result = self.search_params.find_one({"subreddit": sbrdt_name})
+        if result:
+            return result.get("params"), result.get("statistic")
+        return None
+
+    def get_search_results_names(self, deleted=False):
+        """
+        :return: [{_id:<name of subreddit>, count:<count of posts in this subreddit>}]
+        """
+        pipeline = [
+            {"$match": {"source": SRC_SEARCH, "deleted": {"$exists": deleted}}},
+            {"$group": {"_id": "$subreddit", "count": {"$sum": 1}}},
+        ]
+        result = list(self.posts.aggregate(pipeline))
+        return result
 
     def add_raw_posts(self, sbrdt_name, posts):
         found = self.raw_posts.find_one({"name": sbrdt_name})
@@ -80,13 +111,15 @@ class DBHandler(object):
             if crupt == found.get("pwd"):
                 return found.get("user_id")
 
-    def save_post(self, post):
+    def save_post(self, post, source=None):
+        if source:
+            post['source'] = source
         if not self.posts.find_one({"fullname": post.get("fullname"), "video_id": post.get("video_id")}):
             post['updated'] = time.time()
             self.posts.insert_one(post)
 
     def get_post(self, fullname, video_id):
-        found = self.posts.find_one({"fullname":fullname, "video_id":video_id})
+        found = self.posts.find_one({"fullname": fullname, "video_id": video_id})
         return found
 
     def is_post_present(self, post_full_name):
@@ -94,8 +127,15 @@ class DBHandler(object):
         return found is not None
 
     def is_post_video_id_present(self, video_id):
+        if self.cache.get(video_id):
+            return True
+
         found = self.posts.find_one({"video_id": video_id})
-        return found is not None
+        if found:
+            self.cache[video_id] = True
+            return True
+
+        return False
 
     def update_post(self, post):
         post['updated'] = time.time()
@@ -110,9 +150,12 @@ class DBHandler(object):
              "deleted": {"$exists": False}})
         return found
 
-    def get_posts_of_subreddit(self, name):
-        posts = [el for el in self.posts.find({"subreddit": name,
-                                               "deleted": {"$exists": False}})]
+    def get_posts_of_subreddit(self, name, source=None):
+        params = {"subreddit": name,
+                  "deleted": {"$exists": False}}
+        if source:
+            params['source'] = source
+        posts = [el for el in self.posts.find(params)]
         return posts
 
     def add_subreddit(self, subreddit_name, retrieve_params, time_step):

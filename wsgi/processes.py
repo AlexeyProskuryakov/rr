@@ -63,7 +63,7 @@ class SubredditProcessWorker(Process):
                 retriever = Retriever()
                 for post in retriever.process_subreddit(interested_posts, params):
                     count += 1
-                    self.db.save_post(post)
+                    self.db.save_post(post, "observation")
 
                 log.info("SPW for %s retrieved: %s posts \n interested posts: (%s) \n added: %s" % (
                     name, len(posts), len(interested_posts), count))

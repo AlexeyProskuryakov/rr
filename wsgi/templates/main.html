@@ -69,6 +69,68 @@
                 </div>
             </div>
         </div>
+
+        <div class="row">
+            <div class="col-md-6 col-md-offset-1">
+                <button type="button" class="btn btn-success btn-lg" data-toggle="modal"
+                        data-target="#__New_Search_Modal">NEW BY SEARCH
+                </button>
+
+                <!-- Modal -->
+                <div class="modal fade" id="__New_Search_Modal" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                <h1>FUCKING FORM!</h1>
+                            </div>
+                            <div class="modal-body">
+                                <form action="{{url_for('search_load')}}" method="POST" id="search_load_form">
+                                    <div class="form-group">
+                                        <label for="name_s">Имя сабреддита</label>
+                                        <input id="name_s" name="name" type="text" class="form-control"
+                                               placeholder="funny">
+                                        <label for="before">Не младше:</label>
+                                        <input id="before" name="before" type="text" class="form-control datepicker">
+                                        <label for="words">Словечки <kbd>;:,. </kbd></label>
+                                        <input id="words" name="words" type="text" class="form-control"/>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="rate_min_s">Минимальный рейтинг</label>
+                                        <input id="rate_min_s" name="rate_min" type="text" class="form-control">
+
+                                        <label for="rate_max_s">Максимальный рейтинг</label>
+                                        <input id="rate_max_s" name="rate_max" type="text" class="form-control">
+
+                                        <label for="reposts_max_s">Максимальное количество копий</label>
+                                        <input id="reposts_max_s" name="reposts_max" type="text" class="form-control">
+
+                                        <label for="time_min_s">Минимальное время видео (шаблон - хуеблон)</label>
+                                        <input id="time_min_s" name="time_min" type="text" class="form-control"
+                                               placeholder="PT0H1M30S">
+                                    </div>
+                                    <button type="submit" class="btn btn-default">EBASH!</button>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <div id="load_signal" class="well">
+                                    LOAD.... WAIT....
+                                </div>
+                                <button type="button" class="btn btn-default" data-dismiss="modal">NAX...</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                {% for sr in search_results_names %}
+                <a href="/search/result/{{ sr['_id'] }}">{{ sr['_id'] }}</a> ({{ sr['count'] }})
+                {% endfor %}
+            </div>
+        </div>
         <div class="row">
             <hr>
             <div class="col-md-1 legend">

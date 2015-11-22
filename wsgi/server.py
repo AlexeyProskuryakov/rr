@@ -1,4 +1,6 @@
 # coding=utf-8
+import re
+from datetime import datetime, timedelta
 from uuid import uuid4
 from multiprocessing import Queue
 import os
@@ -11,7 +13,8 @@ from db import DBHandler
 from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 import properties
-from wsgi.engine import reddit_search
+from wsgi.engine import reddit_search, Retriever
+from wsgi.properties import SRC_SEARCH
 
 __author__ = '4ikist'
 
@@ -223,8 +226,10 @@ def update_post(fullname, video_id):
 def main():
     user = g.user
     result = db.get_subreddists_statistic()
+    search_results_names = db.get_search_results_names()
     return render_template("main.html", **{"username": user.name,
                                            "result": result,
+                                           "search_results_names": search_results_names,
                                            "go": True})
 
 
@@ -249,6 +254,8 @@ def get_chart_data(name):
         lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"), all)
     all = filter(lambda x: x.get("fullname") not in loaded_fns, all)
 
+    search = db.get_posts_of_subreddit(name, SRC_SEARCH)
+
     def post_chart_data(post):
         return [int(post.get("created_utc") - fe_time), post.get("ups")]
 
@@ -261,6 +268,7 @@ def get_chart_data(name):
     data = {"series": [
         {"label": "loaded", "data": [post_chart_data(post) for post in loaded]},
         {"label": "all", "data": [post_chart_data(post) for post in all]},
+        {"label": SRC_SEARCH, "data": [post_chart_data(post) for post in search]}
     ],
         "info": info}
     return jsonify(**data)
@@ -273,21 +281,93 @@ def ex_search():
         q = request.form.get("q")
         result = reddit_search(q)
         if len(result):
-            return render_template("ex_search.html", **{"heads": result[0].keys(), "posts": result, "content_present":True, "count":len(result)})
-    return render_template("ex_search.html", **{"content_present":False})
+            return render_template("ex_search.html",
+                                   **{"heads": result[0].keys(), "posts": result, "content_present": True,
+                                      "count": len(result)})
+    return render_template("ex_search.html", **{"content_present": False})
 
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
+@app.route("/search/result/<name>", methods=["GET"])
+@login_required
+def search_result(name):
+    prms = db.get_search_params(name)
+    if not prms:
+        return redirect(url_for('main'))
 
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
+    p, s = prms
+    posts = db.get_posts_of_subreddit(name, SRC_SEARCH)
+    count = len(posts)
+    return render_template("search.html", **{"params": p, "statistic": s, "posts": posts, "content_present": count > 0,
+                                                 "count": count, "name":name})
 
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+
+@app.route("/search/load", methods=["POST"])
+@login_required
+def search_load():
+    params = {}
+    params['name'] = name = request.form.get("name")
+    if not name:
+        return jsonify(**{"ok": False, "detail": "name required"})
+
+    params['rate_min'] = int(request.form.get("rate_min") or 0)
+    params['rate_max'] = int(request.form.get("rate_max") or 99999)
+    params['reposts_max'] = int(request.form.get("reposts_max") or 10)
+    params['time_min'] = request.form.get("time_min") or properties.default_time_min
+
+    before_raw = request.form.get("before")
+    if before_raw and len(before_raw):
+        before = datetime.strptime(before_raw, "%d/%m/%Y")
+    else:
+        before = datetime.utcnow() - timedelta(days=30)
+
+    words_raw = str(request.form.get("words"))
+    params['before'] = before
+    params['words'] = words = re.split("[;,:\.]\s?", words_raw)
+    db.add_search_params(name, params, {})
+    log.info("will search for %s before %s \nwith params:%s" % (name, before, params))
+
+    video_ids = set()
+    all_posts = []
+
+    for word in words:
+        query = "site:youtube.com title:%s subreddit:%s" % (word, name)
+        log.info("Start search: %s" % query)
+        posts = reddit_search(query)
+        posts = filter(
+            lambda x: (before - x.get("created_dt")).total_seconds() > 0 and x.get("video_id") not in video_ids, posts)
+        posts = filter(
+            lambda x: not db.is_post_video_id_present(x.get("video_id")), posts
+        )
+        cur_v_ids = set(map(lambda x: x.get("video_id"), posts))
+        difference = len(cur_v_ids.difference(video_ids))
+        log.info("New posts: %s" % difference)
+        if difference:
+            map(lambda x: video_ids.add(x.get("video_id")), posts)
+            all_posts.extend(posts)
+        elif len(video_ids) > 0:
+            break
+
+    log.info("will process %s posts..." % len(all_posts))
+
+    rtrv = Retriever()
+    for post in rtrv.process_subreddit(all_posts, params):
+        db.save_post(post, SRC_SEARCH)
+
+    db.add_search_params(name, params, rtrv.statistic)
+    return jsonify(**{"ok": True, "name": name})
+
+
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)

@@ -1,4 +1,115 @@
 {% extends "main.html" %}
 {% block content %}
-{{super()}}
+
+<!--params,statistic -->
+<div class="container-fluid">
+    <div class="row">
+        <small>So big ups</small>
+        <strong>{{statistic['big_ups']}}</strong>;
+
+        <small>So little ups</small>
+        <strong>{{statistic['little_ups']}}</strong>;
+
+        <small>So big reposts count</small>
+        <strong>{{statistic['big_reposts_count']}}</strong>;
+
+        <small>So litlle time</small>
+        <strong>{{statistic['little_time']}}</strong>;
+
+        <small>Not video...?:)</small>
+        <strong>{{statistic['not_video']}}</strong>
+
+    </div>
+    <div class="row">
+        <div class="alert alert-info" role="alert">Chart for all type posts of subreddit {{ name }} </div>
+        <div id="posts-chart" chart_for="{{ name }}"></div>
+    </div>
+    <div class="row">
+        <h5>
+            <strong>{{params}}</strong>
+        </h5>
+    </div>
+    <div class="row">
+        <div class="col-md-6 col-md-offset-1">
+            <button type="button" class="btn btn-success btn-lg" data-toggle="modal"
+                    data-target="#__New_Search_Modal">Change
+            </button>
+
+            <!-- Modal -->
+            <div class="modal fade" id="__New_Search_Modal" role="dialog">
+                <div class="modal-dialog">
+                    <!-- Modal content-->
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                            <h1>FUCKING FORM!</h1>
+                        </div>
+                        <div class="modal-body">
+                            <form action="{{url_for('search_load')}}" method="POST">
+                                <div class="form-group">
+                                    <label for="name">Имя сабреддита</label>
+                                    <input id="name" name="name" type="text" class="form-control" placeholder="funny"
+                                           value="{{params['name']}}">
+                                    <label for="before">Не младше:</label>
+                                    <input id="before" name="before" type="text" class="form-control datepicker"
+                                           value="{{params['before']}}">
+                                    <label for="words">Словечки <kbd>;:,. </kbd></label>
+                                    <input id="words" name="words" type="text" class="form-control"
+                                           value="{{ params['words'] }}"/>
+                                    <input type="hidden" name="update" value="true">
+                                </div>
+                                <div class="form-group">
+                                    <label for="rate_min">Минимальный рейтинг</label>
+                                    <input id="rate_min" name="rate_min" type="text" class="form-control"
+                                           value="{{params['rate_min']}}">
+
+                                    <label for="rate_max">Максимальный рейтинг</label>
+                                    <input id="rate_max" name="rate_max" type="text" class="form-control"
+                                           value="{{params['rate_max']}}">
+
+                                    <label for="reposts_max">Максимальное количество копий</label>
+                                    <input id="reposts_max" name="reposts_max" type="text" class="form-control"
+                                           value="{{params['reposts_max']}}">
+
+                                    <label for="time_min">Минимальное время видео (шаблон - хуеблон)</label>
+                                    <input id="time_min" name="time_min" type="text" class="form-control"
+                                           value="{{params['time_min']}}"
+                                           placeholder="PT0H1M30S">
+                                </div>
+                                <button type="submit" class="btn btn-default">EBASH!</button>
+                            </form>
+
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">NAX...</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            {% if content_present %}
+            <h1>
+                POSTS:
+            </h1>
+
+            <span>
+                found {{count}} results...
+            </span>
+
+
+            {% include "partials/post_row.html"%}
+
+
+            {% else %}
+
+            No results покамест...
+
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock%}
