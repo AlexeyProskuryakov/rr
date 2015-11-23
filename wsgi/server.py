@@ -306,8 +306,8 @@ def search_result(name):
 
     p, s = prms
     posts = db.get_posts_of_subreddit(name, SRC_SEARCH)
-    p['words'] = ", ".join(p.get("words", []))
-    p["before"] = p.get("before", datetime.utcnow()).strftime("%d/%m/%Y")
+    p['words'] = ", ".join(p.get('words', []))
+    p['before'] = p.get('before', datetime.utcnow()).strftime("%d/%m/%Y")
     count = len(posts)
     return render_template("search.html", **{"params": p, "statistic": s, "posts": posts, "content_present": count > 0,
                                              "count": count, "name": name})
