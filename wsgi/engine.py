@@ -51,7 +51,7 @@ def to_save(post):
             "video_url": post.get("url") or post.get("video_url"),
             "title": post.get("title"),
             "ups": post.get("ups"),
-            "reddit_url": post.get("permalink") or post.get("reddit_url") or "http://reddit.com/"+post.get("fullname"),
+            "reddit_url": post.get("permalink") or post.get("reddit_url"),
             "subreddit": post.get("subreddit"),
             "fullname": post.get("fullname"),
             "reposts_count": post.get("reposts_count"),

@@ -306,6 +306,9 @@ def search_result(name):
 
     p, s = prms
     posts = db.get_posts_of_subreddit(name, SRC_SEARCH)
+    for post in posts:
+        if not post.get("reddit_url"):
+            post['reddit_url'] = "http://reddit.com/"+post.get("fullname")
     p['words'] = ", ".join(p.get('words', []))
     p['before'] = p.get('before', datetime.utcnow()).strftime("%d/%m/%Y")
     count = len(posts)
