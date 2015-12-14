@@ -112,26 +112,27 @@ class RedditBot(object):
         get_comment_authors = lambda post_comments: set(
             map(lambda comment: comment.author.name if not isinstance(comment, MoreComments) and comment.author  else "",
                 post_comments)
-        )
+        ) # function for retrieving authors from post comments
         while 1:
-            subreddit = self.reddit.get_random_subreddit()
-            self.s_c_rs += 1
-            new_posts = filter(lambda x: x.num_comments > min_comments_at_post, list(subreddit.get_new()))
-            for post in new_posts:
-                if self.last_actions.is_acted(A_COMMENT, post.fullname):
+            subreddit = self.reddit.get_random_subreddit() #getting random comment
+            self.s_c_rs += 1 #only for statistic of requests
+            new_posts = filter(lambda x: x.num_comments > min_comments_at_post, list(subreddit.get_new())) #getting interested posts (filtering by comments count of new posts in random subreddit (min_comments count see at start))
+            for post in new_posts: # by post of interested posts
+                if self.last_actions.is_acted(A_COMMENT, post.fullname): #if this post was comment by me skipping this post
                     continue
-                post_comments = set(list(post.comments))
-                post_comments_authors = get_comment_authors(post_comments)
-                copies = self._get_post_copies(post)
-                if len(copies) > min_copy_count:
-                    for copy in copies:
-                        if copy.fullname != post.fullname:
+                post_comments = set(list(post.comments)) #get comments
+                post_comments_authors = get_comment_authors(post_comments) #getting authors of this comments
+                copies = self._get_post_copies(post) #getting copies of this post
+                if len(copies) > min_copy_count: # if count of copies is grater than min copy count (this value see at start of this file)
+                    for copy in copies:  #for each copy of post...
+                        if copy.fullname != post.fullname: #if this copy is not interested post
                             # todo at first you must remove post comments in copy comments
-                            comment = self.retrieve_interested_comment(copy.comments, post_comments_authors)
-                            if comment and comment not in set(map(lambda x: x.body, post.comments)):
+                            comment = self.retrieve_interested_comment(copy.comments, post_comments_authors) #get some comment from this copy post (comment not deleted, its author not comment original post77)
+                            if comment and comment not in set(map(lambda x: x.body, post.comments)): #this comment is exists and this body not equals to some comment in original post
                                 log.info(
                                     "comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
-                                self.last_actions.set_action(A_COMMENT, post.fullname)
+                                post.add_comment(comment.body) #commenting original post
+                                self.last_actions.set_action(A_COMMENT, post.fullname) #imply this action...
                                 return
 
     def do_vote_post(self):
