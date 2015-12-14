@@ -16,7 +16,7 @@ def module_path():
 
 log_file = os.path.join(module_path(), 'result.log')
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler(log_file)
 ch = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s[%(levelname)s]%(name)s|%(processName)s(%(process)d): %(message)s')

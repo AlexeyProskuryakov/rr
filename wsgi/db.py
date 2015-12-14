@@ -45,6 +45,14 @@ class DBHandler(object):
         self.search_params.create_index([("subreddit", pymongo.ASCENDING)])
 
         self.cache = {}
+        self.statistics = db.get_collection("statistic") or db.create_collection(
+            'statistics',
+            capped=True,
+            size=1024 * 1024 * 2,  # required
+            )
+
+        self.statistics.create_index([("time", pymongo.ASCENDING)])
+        self.statistics.create_index([("type", pymongo.ASCENDING)])
 
     def add_search_params(self, sbrdt_name, params, statistic):
         ps = self.get_search_params(sbrdt_name)
@@ -125,8 +133,6 @@ class DBHandler(object):
     def is_post_present(self, post_full_name):
         found = self.posts.find_one({"fullname": post_full_name})
         return found is not None
-
-
 
     def is_post_video_id_present(self, video_id):
         if self.cache.get(video_id):
