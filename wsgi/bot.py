@@ -114,7 +114,7 @@ class RedditBot(object):
                 post_comments)
         ) # function for retrieving authors from post comments
         while 1:
-            subreddit = self.reddit.get_random_subreddit() #getting random comment
+            subreddit = self.reddit.get_random_subreddit() #getting random subreddit
             self.s_c_rs += 1 #only for statistic of requests
             new_posts = filter(lambda x: x.num_comments > min_comments_at_post, list(subreddit.get_new())) #getting interested posts (filtering by comments count of new posts in random subreddit (min_comments count see at start))
             for post in new_posts: # by post of interested posts
