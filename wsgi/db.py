@@ -46,13 +46,33 @@ class DBHandler(object):
 
         self.cache = {}
         self.statistics = db.get_collection("statistic") or db.create_collection(
-            'statistics',
-            capped=True,
-            size=1024 * 1024 * 2,  # required
-            )
+                'statistics',
+                capped=True,
+                size=1024 * 1024 * 2,  # required
+        )
 
         self.statistics.create_index([("time", pymongo.ASCENDING)])
         self.statistics.create_index([("type", pymongo.ASCENDING)])
+
+        self.bot_log = db.get_collection("bot_log") or db.create_collection(
+                "bot_log",
+                capped=True,
+                size=1024 * 1024 * 256,
+        )
+
+        self.bot_log.create_index([("time", pymongo.ASCENDING)])
+        self.bot_log.create_index([("action", pymongo.ASCENDING)])
+        self.bot_log.create_index([("r_id", pymongo.ASCENDING)])
+
+        self.reddit_logins = db.get_collection("reddit_logins")
+
+    def save_reddit_login(self, login, password):
+        self.reddit_logins.insert_one({"login": login, "password": password})
+
+
+    def get_reddit_logins(self, q=None):
+        query = q or {}
+        return self.reddit_logins.find(query)
 
     def add_search_params(self, sbrdt_name, params, statistic):
         ps = self.get_search_params(sbrdt_name)
@@ -154,8 +174,8 @@ class DBHandler(object):
 
     def get_posts_for_update(self, min_update_period=properties.min_update_period):
         found = self.posts.find(
-            {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}],
-             "deleted": {"$exists": False}})
+                {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}],
+                 "deleted": {"$exists": False}})
         return found
 
     def get_posts_of_subreddit(self, name, source=None):

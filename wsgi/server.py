@@ -201,7 +201,7 @@ def info_subreddit(name):
     sbrdt_info = db.get_subreddists_statistic()[name]
     return render_template("subbredit_info.html", **{"username": user.name,
                                                      "posts": posts,
-                                                     "el": sbrdt_info, })
+                                                     "el": sbrdt_info,})
 
 
 @app.route("/post/del/<fullname>/<video_id>", methods=["GET"])
@@ -251,7 +251,8 @@ def get_chart_data(name):
 
     all = filter(lambda x: x.get("video_id") is not None, all)
     all = filter(
-        lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"), all)
+            lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"),
+            all)
     all = filter(lambda x: x.get("fullname") not in loaded_fns, all)
 
     search = db.get_posts_of_subreddit(name, SRC_SEARCH)
@@ -276,9 +277,9 @@ def get_chart_data(name):
         {"label": "all", "data": [post_chart_data(post) for post in all]},
         {"label": SRC_SEARCH, "data": [post_chart_data(post) for post in search]}
     ],
-        "series_prms":[
-            {"label":"comment_counts", "data":[post_comments_data(post) for post in loaded + search]},
-            {"label":"copies_count", "data":[post_comments_data(post) for post in loaded + search]},
+        "series_prms": [
+            {"label": "comment_counts", "data": [post_comments_data(post) for post in loaded + search]},
+            {"label": "copies_count", "data": [post_comments_data(post) for post in loaded + search]},
         ],
         "info": info}
     return jsonify(**data)
@@ -308,7 +309,7 @@ def search_result(name):
     posts = db.get_posts_of_subreddit(name, SRC_SEARCH)
     for post in posts:
         if not post.get("reddit_url"):
-            post['reddit_url'] = "http://reddit.com/"+post.get("fullname")
+            post['reddit_url'] = "http://reddit.com/" + post.get("fullname")
     p['words'] = ", ".join(p.get('words', []))
     p['before'] = p.get('before', datetime.utcnow()).strftime("%d/%m/%Y")
     count = len(posts)
@@ -349,11 +350,12 @@ def search_load():
         log.info("Start search: %s" % query)
         posts = reddit_search(query)
         posts = filter(
-            lambda x: (before - x.get("created_dt")).total_seconds() > 0 and x.get("video_id") not in video_ids, posts)
+                lambda x: (before - x.get("created_dt")).total_seconds() > 0 and x.get("video_id") not in video_ids,
+                posts)
         cur_v_ids = set(map(lambda x: x.get("video_id"), posts))
         difference = cur_v_ids.difference(video_ids)
         difference = filter(
-            lambda x: not db.is_post_video_id_present(x), difference
+                lambda x: not db.is_post_video_id_present(x), difference
         )
 
         log.info("New posts: %s" % len(difference))
@@ -373,17 +375,29 @@ def search_load():
     return jsonify(**{"ok": True, "name": name})
 
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
+@login_required
+@app.route("/logins", methods=["GET", "POST"])
+def reddit_logins():
+    if request.method == "POST":
+        form = request.form
+        login = form.get("login")
+        password = form.get("password")
 
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
+        return jsonify(**{"ok":True})
+    if request.method == "GET":
+        return render_template("")
 
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)
