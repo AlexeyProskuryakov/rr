@@ -45,7 +45,7 @@ class DBHandler(object):
         self.search_params.create_index([("subreddit", pymongo.ASCENDING)])
 
         self.cache = {}
-        self.statistics = db.get_collection("statistic") or db.create_collection(
+        self.statistics = db.get_collection("statistics") or db.create_collection(
                 'statistics',
                 capped=True,
                 size=1024 * 1024 * 2,  # required

@@ -16,6 +16,10 @@ from requests import get
 
 from wsgi.engine import net_tryings
 
+import re
+
+re_url = re.compile("((https?|ftp)://|www\.)[^\s/$.?#].[^\s]*")
+
 MIN_COPY_COUNT = 10
 
 log = properties.logger.getChild("reddit-bot")
@@ -25,12 +29,19 @@ A_VOTE = "vote"
 A_COMMENT = "comment"
 
 min_copy_count = 2
-min_comment_create_time_difference = 3600 * 24 * 60
-min_redditor_time_disable = 3600 * 24 * 7
-min_comment_ups = 0
-max_comment_ups = 100000
-min_comments_at_post = 10
+min_comment_create_time_difference = 3600 * 24 * 30 * 2
 
+min_comment_ups = 20
+max_comment_ups = 100000
+
+min_donor_num_comments = 100
+
+min_selection_comments = 10
+max_selection_comments = 20
+
+check_comment_text = lambda text: not re_url.match(text) and len(text) > 15 and len(text) < 120
+
+post_info = lambda post: {"fullname": post.fullname, "url": post.url}
 db = DBHandler()
 
 
@@ -63,8 +74,7 @@ class ActionsHandler(object):
         self.last_actions[action_name] = datetime.utcnow()
         self.acted[action_name].add(identity)
         if info:
-            to_save = {'action': action_name, "r_id": identity}
-            to_save.update(info)
+            to_save = {'action': action_name, "r_id": identity, "info": info}
             db.bot_log.insert_one(to_save)
             self.info[identity] = info
 
@@ -86,7 +96,7 @@ class ActionsHandler(object):
 
 
 def _so_long(created, min_time):
-    (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
+    return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
 
 
 class loginsProvider(object):
@@ -126,24 +136,26 @@ class loginsProvider(object):
 
     @net_tryings
     def check_current_login(self):
-        res = get("http://cors-anywhere.herokuapp.com/www.reddit.com/user/%s/about.json"%self.current_login.get("login"),
-                  headers={"origin":"http://www.reddit.com"})
+        res = get(
+                "http://cors-anywhere.herokuapp.com/www.reddit.com/user/%s/about.json" % self.current_login.get(
+                        "login"),
+                headers={"origin": "http://www.reddit.com"})
         if res.status_code != 200:
             raise Exception("result code of checking is != 200")
 
 
 class RedditBot(object):
-    def __init__(self, logins):
+    def __init__(self, logins, subreddits):
         self.login_provider = loginsProvider(logins)
-        self._login = self.login_provider.get_early_login()
-        self.reddit = praw.Reddit(
-                user_agent="%s Bot engine.///" % self._login.get("login"))
-        self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
-        log.info("bot [%s] connected" % self._login.get("login"))
+        self.populate_stat_object()
+        self.change_login()
+
         self.last_actions = ActionsHandler()
         self.comment_authors = set()
 
         self.mutex = Lock()
+        self.subreddits = subreddits
+        self.low_copies_posts = set()
 
     def populate_stat_object(self):
         self.s_c_s = 0  # count search requests
@@ -156,82 +168,115 @@ class RedditBot(object):
                 user_agent="%s Bot engine.///" % self._login.get("login"))
         self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
         log.info("bot [%s] connected" % self._login.get("login"))
-        stat_fn(self, "change_login", **{})
-        self.populate_stat_object()
 
     def return_stats(self):
         self.mutex.acquire()
-        stat = {"search": self.s_c_s, "random_subreddit": self.s_c_rs, "author_overview": self.s_c_aovv, "votes": s}
+        stat = {"search": self.s_c_s, "random_subreddit": self.s_c_rs, "author_overview": self.s_c_aovv}
         log.info("return stat: %s" % stat)
         self.mutex.release()
         return stat
 
     def _get_post_copies(self, post):
-        copies = self.reddit.search("url:'/%s'/" % post.url)
+        copies = list(self.reddit.search("url:'/%s'/" % post.url))
+        log.debug("found %s copies by url: %s" % (len(copies), post.url))
         self.s_c_s += 1
         return list(copies)
 
-    def retrieve_interested_comment(self, comments, post_comment_authors):
-        # post.replace_more_comments(limit=32, threshold=0)
-        for comment in comments:
+    def retrieve_interested_comment(self, copy, post_comment_authors):
+        if copy.num_comments < min_donor_num_comments:
+            return
+
+        # prepare comments from donor to selection
+        comments = []
+        for i, comment in enumerate(copy.comments):
             if isinstance(comment, MoreComments):
-                log.warn("comment is MoreComment %s" % comment)
+                try:
+                    comments.extend(comment.comments())
+                except Exception as e:
+                    log.exception(e)
+                    log.warning("Fuck. Some error. More comment were not unwind. ")
+            if i < random.randint(min_selection_comments, max_selection_comments):
                 continue
+            comments.append(comment)
+
+        for comment in comments:
             author = comment.author
-            created = comment.created_utc
+            if author and comment.ups >= min_comment_ups and comment.ups <= max_comment_ups and check_comment_text(
+                    comment.body):
+                return comment.body
 
-            if author and author.name not in self.comment_authors and author.name not in post_comment_authors:
-                log.info("author found: %s" % author.name)
-                if _so_long(created, min_comment_create_time_difference) \
-                        and comment.ups >= min_comment_ups \
-                        and comment.ups <= max_comment_ups:
-                    log.debug("will getting author activity for comment: [%s]\n and author: [%s]" % (comment, author))
-                    try:
-                        activity = author.get_overview().next()
-                        self.s_c_aovv += 1
-                    except Exception as e:
-                        log.exception(e)
-
-                    log.debug(
-                            "and activity is: %s at created: %s" % (
-                                activity, datetime.fromtimestamp(activity.created_utc)))
-                    if _so_long(activity.created_utc, min_redditor_time_disable):
-                        self.comment_authors.add(author.name)
-                        return comment.body
+    def get_all_post_comments(self, post, filter_func=lambda x: x):
+        result = []
+        for comment in post.comments:
+            if isinstance(comment, MoreComments):
+                result.extend(filter(filter_func, comment.comments()))
+            else:
+                result.append(filter_func(comment))
+        return result
 
     def do_comment(self):
         get_comment_authors = lambda post_comments: set(
                 map(lambda comment: comment.author.name if not isinstance(comment,
-                                                                          MoreComments) and comment.author  else "",
+                                                                          MoreComments) and comment.author else "",
                     post_comments)
         )  # function for retrieving authors from post comments
+
+        def cmp_by_created_utc(x, y):
+            result = x.created_utc - y.created_utc
+            if result > 0.5:
+                return 1
+            elif result < 0.5:
+                return -1
+            else:
+                return 0
+
+        def get_hot_and_new(subreddit):
+            hot = list(subreddit.get_hot(limit=100))
+            new = list(subreddit.get_new(limit=100))
+            hot_d = dict(map(lambda x: (x.fullname, x), hot))
+            new_d = dict(map(lambda x: (x.fullname, x), new))
+            hot_d.update(new_d)
+            log.info("Will search for dest posts candidates at %s posts" % len(hot_d))
+            result = hot_d.values()
+            result.sort(cmp=cmp_by_created_utc)
+            return result
+
+        used_subreddits = set()
+
         while 1:
-            subreddit = self.reddit.get_random_subreddit()  # getting random subreddit
-            self.s_c_rs += 1  # only for statistic of requests
-            new_posts = filter(lambda x: x.num_comments > min_comments_at_post, list(
-                    subreddit.get_new()))  # getting interested posts (filtering by comments count of new posts in random subreddit (min_comments count see at start))
-            for post in new_posts:  # by post of interested posts
-                if self.last_actions.is_acted(A_COMMENT,
-                                              post.fullname):  # if this post was comment by me skipping this post
+            subreddit = random.choice(self.subreddits)
+            if subreddit in used_subreddits:
+                continue
+            else:
+                used_subreddits.add(subreddit)
+
+            self.s_c_rs += 1
+            all_posts = get_hot_and_new(self.reddit.get_subreddit(subreddit_name=subreddit))
+            for post in all_posts:
+                if self.last_actions.is_acted(A_COMMENT, post.fullname) or post.url in self.low_copies_posts:
                     continue
-                post_comments = set(list(post.comments))  # get comments
-                post_comments_authors = get_comment_authors(post_comments)  # getting authors of this comments
-                copies = self._get_post_copies(post)  # getting copies of this post
-                if len(
-                        copies) > min_copy_count:  # if count of copies is grater than min copy count (this value see at start of this file)
-                    for copy in copies:  # for each copy of post...
-                        if copy.fullname != post.fullname:  # if this copy is not interested post
-                            # todo at first you must remove post comments in copy comments
-                            comment = self.retrieve_interested_comment(copy.comments,
-                                                                       post_comments_authors)  # get some comment from this copy post (comment not deleted, its author not comment original post77)
-                            if comment and comment not in set(map(lambda x: x.body,
-                                                                  post.comments)):  # this comment is exists and this body not equals to some comment in original post
-                                log.info(
-                                        "comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
-                                post.add_comment(comment.body)  # commenting original post
-                                self.last_actions.set_action(A_COMMENT, post.fullname, post)  # imply this action...
+                copies = self._get_post_copies(post)
+                copies = filter(lambda copy: _so_long(copy.created_utc, min_comment_create_time_difference), copies)
+                if len(copies) > min_copy_count:
+                    post_comments = set(self.get_all_post_comments(post))
+                    post_comments_authors = get_comment_authors(post_comments)
+
+                    copies.sort(cmp=cmp_by_created_utc)
+                    for copy in copies:
+                        if copy.fullname != post.fullname:
+                            comment = self.retrieve_interested_comment(copy, post_comments_authors)
+                            if comment and comment not in set(map(
+                                    lambda x: x.body if not isinstance(x, MoreComments) else "",
+                                    post_comments
+                            )):
+                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
+                                post.add_comment(comment)  # commenting original post
+                                self.last_actions.set_action(A_COMMENT, post.fullname,
+                                                             post_info(post))  # imply this action...
                                 log.info("%s", self.return_stats())
                                 return
+                else:
+                    self.low_copies_posts.add(post.url)
 
     def do_vote_post(self):
         while 1:
@@ -243,7 +288,7 @@ class RedditBot(object):
                 vote_dir = random.choice([1, -1])
                 post.vote(vote_dir)
                 log.info("vote %s post: %s subreddit %s" % (vote_dir, post, subreddit))
-                self.last_actions.set_action(A_VOTE, post.fullname, post)
+                self.last_actions.set_action(A_VOTE, post.fullname, post_info(post))
                 return
 
     def do_vote_comment(self, post=None):
@@ -278,25 +323,25 @@ class StatWorker(Thread):
 
 
 if __name__ == '__main__':
-    # bot = None
-    # try:
-    #     bot = RedditBot("4ikist", "sederfes")
-    #     stat_thread = StatWorker(bot)
-    #     stat_thread.setDaemon(True)
-    #     stat_thread.start()
-    #
-    #     bot.do_comment()
-    #     stat_fn(bot, "comment")
-    #
-    #     bot = RedditBot("4ikist", "sederfes")
-    #     bot.do_vote_post()
-    #     stat_fn(bot, "vote_post")
-    #
-    #     bot = RedditBot("4ikist", "sederfes")
-    #     bot.do_vote_comment()
-    #     stat_fn(bot, "vote_comment")
-    # except Exception as e:
-    #     log.exception(e)
-    #     stat_fn(bot, "exception", type="error", exception=e.message, stacktrace=traceback.format_exc())
-    lp = loginsProvider()
-    lp.check_current_login()
+    bot = None
+    try:
+        bot = RedditBot(logins=None, subreddits=["videos"])
+        # stat_thread = StatWorker(bot)
+        # stat_thread.setDaemon(True)
+        # stat_thread.start()
+
+        bot.do_comment()
+        stat_fn(bot, "comment")
+
+        bot.do_vote_post()
+        stat_fn(bot, "vote_post")
+
+        bot.do_vote_comment()
+        stat_fn(bot, "vote_comment")
+
+    except Exception as e:
+        log.exception(e)
+        stat_fn(bot, "exception", type="error", exception=e.message, stacktrace=traceback.format_exc())
+
+        # lp = loginsProvider()
+        # lp.check_current_login()
