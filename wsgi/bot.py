@@ -1,26 +1,19 @@
-import logging
-import traceback
 from collections import defaultdict
 from datetime import datetime
-import time
-import random
-from multiprocessing import Lock
-from threading import Thread
-
+from multiprocessing import Lock, Queue
 import praw
 from praw.objects import MoreComments
+import random
+import re
+import requests
+import time
 
 from wsgi import properties
 from wsgi.db import DBHandler
-from requests import get
-
 from wsgi.engine import net_tryings
-
-import re
 
 re_url = re.compile("((https?|ftp)://|www\.)[^\s/$.?#].[^\s]*")
 
-MIN_COPY_COUNT = 10
 
 log = properties.logger.getChild("reddit-bot")
 
@@ -28,36 +21,37 @@ A_POST = "post"
 A_VOTE = "vote"
 A_COMMENT = "comment"
 
+DEFAULT_LIMIT = 100
+
 min_copy_count = 2
 min_comment_create_time_difference = 3600 * 24 * 30 * 2
-
 min_comment_ups = 20
 max_comment_ups = 100000
-
-min_donor_num_comments = 100
-
+min_donor_num_comments = 50
 min_selection_comments = 10
 max_selection_comments = 20
 
 check_comment_text = lambda text: not re_url.match(text) and len(text) > 15 and len(text) < 120
-
 post_info = lambda post: {"fullname": post.fullname, "url": post.url}
+
 db = DBHandler()
 
 
-def stat_fn(bot, action, **kwargs):
-    stat_obj = {"time": time.time()}
+def _so_long(created, min_time):
+    return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
 
-    if bot:
-        stat_obj.update(bot.return_stats())
-        stat_obj.update({"type": action})
-    else:
-        stat_obj.update({"type": "bot_is_none"})
 
-    stat_obj.update(kwargs)
-
-    db.statistics.insert_one(stat_obj)
-    return stat_obj
+def _get_hot_and_new(subreddit, sort=None):
+    hot = list(subreddit.get_hot(limit=DEFAULT_LIMIT))
+    new = list(subreddit.get_new(limit=DEFAULT_LIMIT))
+    hot_d = dict(map(lambda x: (x.fullname, x), hot))
+    new_d = dict(map(lambda x: (x.fullname, x), new))
+    hot_d.update(new_d)
+    log.info("Will search for dest posts candidates at %s posts" % len(hot_d))
+    result = hot_d.values()
+    if sort:
+        result.sort(cmp=sort)
+    return result
 
 
 class ActionsHandler(object):
@@ -95,21 +89,15 @@ class ActionsHandler(object):
         return action_info
 
 
-def _so_long(created, min_time):
-    return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
-
-
 class loginsProvider(object):
-    def __init__(self, logins=None, logins_list=None):
+    def __init__(self, login=None, logins_list=None):
         """
-        logins must be {"time of lat use":{login:<login>, password:<pwd>}}
-        :param logins:
-        logins_list list of some dict with keys login and password
-        :return:
+        :param login: must be {"time of lat use":{login:<login>, password:<pwd>, User-Agent:<some user agent>}}
         """
         self.last_time = datetime.now()
-        self.logins = logins or {self.last_time: {'login': "4ikist", "password": "sederfes"}}
-        if logins_list:
+        self.logins = login or {
+            self.last_time: {'login': "4ikist", "password": "sederfes", "User-Agent": "fooo bar baz"}}
+        if logins_list and isinstance(logins_list, list):
             self.add_logins(logins_list)
         self.ensure_times()
         self.current_login = self.get_early_login()
@@ -136,56 +124,110 @@ class loginsProvider(object):
 
     @net_tryings
     def check_current_login(self):
-        res = get(
+        res = requests.get(
                 "http://cors-anywhere.herokuapp.com/www.reddit.com/user/%s/about.json" % self.current_login.get(
                         "login"),
                 headers={"origin": "http://www.reddit.com"})
         if res.status_code != 200:
-            raise Exception("result code of checking is != 200")
+            log.error("Check login is err :( ,%s " % res)
 
 
 class RedditBot(object):
-    def __init__(self, logins, subreddits):
-        self.login_provider = loginsProvider(logins)
-        self.populate_stat_object()
-        self.change_login()
-
+    def __init__(self, subreddits, user_agent=None):
         self.last_actions = ActionsHandler()
-        self.comment_authors = set()
 
         self.mutex = Lock()
         self.subreddits = subreddits
+        self._current_subreddit = None
+
         self.low_copies_posts = set()
 
-    def populate_stat_object(self):
-        self.s_c_s = 0  # count search requests
-        self.s_c_rs = 0  # count requests for random subreddit
-        self.s_c_aovv = 0  # count requests for author overview
+        self.subscribed_subreddits = set()
+        self.friends = set()
 
-    def change_login(self):
-        self._login = self.login_provider.get_early_login()
-        self.reddit = praw.Reddit(
-                user_agent="%s Bot engine.///" % self._login.get("login"))
-        self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
-        log.info("bot [%s] connected" % self._login.get("login"))
+        self.reddit = praw.Reddit(user_agent=user_agent or "Reddit search bot")
 
-    def return_stats(self):
+    @property
+    def current_subreddit(self):
         self.mutex.acquire()
-        stat = {"search": self.s_c_s, "random_subreddit": self.s_c_rs, "author_overview": self.s_c_aovv}
-        log.info("return stat: %s" % stat)
+        result = self._current_subreddit
         self.mutex.release()
-        return stat
+        return result
+
+    @current_subreddit.setter
+    def current_subreddit(self, new_sbrdt):
+        self.mutex.acquire()
+        self._current_subreddit = new_sbrdt
+        self.mutex.release()
+
+    @property
+    def login(self):
+        self.mutex.acquire()
+        result = self._login.get("login")
+        self.mutex.release()
+        return result
+
+
+class RedditReadBot(RedditBot):
+    def __init__(self, subreddits, user_agent=None):
+        super(RedditReadBot, self).__init__(subreddits, user_agent)
+
+    def find_comment(self, at_subreddit=None):
+        get_comment_authors = lambda post_comments: set(
+                map(lambda comment: comment.author.name if not isinstance(comment,
+                                                                          MoreComments) and comment.author else "",
+                    post_comments)
+        )  # function for retrieving authors from post comments
+
+        def cmp_by_created_utc(x, y):
+            result = x.created_utc - y.created_utc
+            if result > 0.5:
+                return 1
+            elif result < 0.5:
+                return -1
+            else:
+                return 0
+
+        used_subreddits = set()
+
+        while 1:
+            subreddit = at_subreddit or random.choice(self.subreddits)
+            if subreddit in used_subreddits:
+                continue
+            else:
+                used_subreddits.add(subreddit)
+
+            self.current_subreddit = subreddit
+            all_posts = _get_hot_and_new(self.reddit.get_subreddit(subreddit_name=subreddit), sort=cmp_by_created_utc)
+            for post in all_posts:
+                if self.last_actions.is_acted(A_COMMENT, post.fullname) or post.url in self.low_copies_posts:
+                    continue
+                copies = self._get_post_copies(post)
+                copies = filter(lambda copy: _so_long(copy.created_utc, min_comment_create_time_difference) and \
+                                             copy.num_comments > min_donor_num_comments,
+                                copies)
+                if len(copies) > min_copy_count:
+                    post_comments = set(self._get_all_post_comments(post))
+                    post_comments_authors = get_comment_authors(post_comments)
+                    copies.sort(cmp=cmp_by_created_utc)
+                    for copy in copies:
+                        if copy.fullname != post.fullname and copy.subreddit != post.subreddit:
+                            comment = self._retrieve_interested_comment(copy, post_comments_authors)
+                            if comment and comment not in set(map(
+                                    lambda x: x.body if not isinstance(x, MoreComments) else "",
+                                    post_comments
+                            )):
+                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
+                                return post, comment
+                else:
+                    self.low_copies_posts.add(post.url)
 
     def _get_post_copies(self, post):
         copies = list(self.reddit.search("url:'/%s'/" % post.url))
         log.debug("found %s copies by url: %s" % (len(copies), post.url))
-        self.s_c_s += 1
         return list(copies)
 
-    def retrieve_interested_comment(self, copy, post_comment_authors):
-        if copy.num_comments < min_donor_num_comments:
-            return
-
+    def _retrieve_interested_comment(self, copy, post_comment_authors):
         # prepare comments from donor to selection
         comments = []
         for i, comment in enumerate(copy.comments):
@@ -205,7 +247,7 @@ class RedditBot(object):
                     comment.body):
                 return comment.body
 
-    def get_all_post_comments(self, post, filter_func=lambda x: x):
+    def _get_all_post_comments(self, post, filter_func=lambda x: x):
         result = []
         for comment in post.comments:
             if isinstance(comment, MoreComments):
@@ -214,69 +256,40 @@ class RedditBot(object):
                 result.append(filter_func(comment))
         return result
 
-    def do_comment(self):
-        get_comment_authors = lambda post_comments: set(
-                map(lambda comment: comment.author.name if not isinstance(comment,
-                                                                          MoreComments) and comment.author else "",
-                    post_comments)
-        )  # function for retrieving authors from post comments
 
-        def cmp_by_created_utc(x, y):
-            result = x.created_utc - y.created_utc
-            if result > 0.5:
-                return 1
-            elif result < 0.5:
-                return -1
-            else:
-                return 0
+class RedditWriteBot(RedditBot):
+    def __init__(self, subreddits, login=None, logins=None):
+        """
+        :param logins: list of
+        :param subreddits:
+        :param login:
+        :return:
+        """
+        super(RedditWriteBot, self).__init__(subreddits)
 
-        def get_hot_and_new(subreddit):
-            hot = list(subreddit.get_hot(limit=100))
-            new = list(subreddit.get_new(limit=100))
-            hot_d = dict(map(lambda x: (x.fullname, x), hot))
-            new_d = dict(map(lambda x: (x.fullname, x), new))
-            hot_d.update(new_d)
-            log.info("Will search for dest posts candidates at %s posts" % len(hot_d))
-            result = hot_d.values()
-            result.sort(cmp=cmp_by_created_utc)
-            return result
+        self.login_provider = loginsProvider(login, logins)
+        if not login:
+            self.change_login()
+        else:
+            self._login = login
 
-        used_subreddits = set()
+        self.comments_queue = Queue()
+        self.r_caf = 0
+        self.r_cur = 0
+        self.ss = 0
 
-        while 1:
-            subreddit = random.choice(self.subreddits)
-            if subreddit in used_subreddits:
-                continue
-            else:
-                used_subreddits.add(subreddit)
+        self.c_read_post = 0
+        self.c_vote_comment = 0
+        self.c_comment_post = 0
 
-            self.s_c_rs += 1
-            all_posts = get_hot_and_new(self.reddit.get_subreddit(subreddit_name=subreddit))
-            for post in all_posts:
-                if self.last_actions.is_acted(A_COMMENT, post.fullname) or post.url in self.low_copies_posts:
-                    continue
-                copies = self._get_post_copies(post)
-                copies = filter(lambda copy: _so_long(copy.created_utc, min_comment_create_time_difference), copies)
-                if len(copies) > min_copy_count:
-                    post_comments = set(self.get_all_post_comments(post))
-                    post_comments_authors = get_comment_authors(post_comments)
+        self.action_function_params = {}
 
-                    copies.sort(cmp=cmp_by_created_utc)
-                    for copy in copies:
-                        if copy.fullname != post.fullname:
-                            comment = self.retrieve_interested_comment(copy, post_comments_authors)
-                            if comment and comment not in set(map(
-                                    lambda x: x.body if not isinstance(x, MoreComments) else "",
-                                    post_comments
-                            )):
-                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
-                                post.add_comment(comment)  # commenting original post
-                                self.last_actions.set_action(A_COMMENT, post.fullname,
-                                                             post_info(post))  # imply this action...
-                                log.info("%s", self.return_stats())
-                                return
-                else:
-                    self.low_copies_posts.add(post.url)
+    def change_login(self):
+        self._login = self.login_provider.get_early_login()
+        self.reddit = praw.Reddit(
+                user_agent=self._login.get("User-Agent"))
+        self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
+        log.info("bot [%s] connected" % self._login.get("login"))
 
     def do_vote_post(self):
         while 1:
@@ -308,40 +321,130 @@ class RedditBot(object):
     def do_posting(self):
         pass
 
+    def init_work_cycle(self):
+        consuming = random.randint(70, 100)
+        production = 100 - consuming
 
-class StatWorker(Thread):
-    def __init__(self, bot):
-        super(StatWorker, self).__init__()
-        self.bot = bot
+        prod_voting = random.randint(60, 100)
+        prod_commenting = 100 - prod_voting
 
-    def run(self):
-        count = 0
-        while 1:
-            count += 1
-            stat_fn(self.bot, "at_time", count=count)
-            time.sleep(60)
+        production_voting = (prod_voting * production) / 100
+        production_commenting = (prod_commenting * production) / 100
+
+        self.action_function_params = {"consume": consuming, "vote": production_voting,
+                                       "comment": production_commenting}
+
+    def can_do(self, action):
+        """
+        Action
+        :param action: can be: [vote, comment, consume]
+        :return:  true or false
+        """
+        self.mutex.acquire()
+        summ = self.c_vote_comment + self.c_comment_post + self.c_read_post
+        interested_count = 0
+        if action == "vote":
+            interested_count = self.c_vote_comment
+        elif action == "comment":
+            interested_count = self.c_comment_post
+        elif action == "consume":
+            interested_count = self.c_read_post
+
+        granted_perc = self.action_function_params.get(action)
+        current_perc = (summ / interested_count) * 100
+        self.mutex.release()
+        return current_perc <= granted_perc
+
+    def add_post_to_comment(self, subreddit_name, post_fullname, comment_text):
+        self.mutex.acquire()
+        self.comments_queue.put(
+                {"subreddit_name": subreddit_name, "post_fullname": post_fullname, "comment_text": comment_text})
+        self.mutex.release()
+
+    def process_work_cycle(self, subreddit_name, url_for_video):
+        pass
+
+    def do_see_post(self, post, subscribe=True, author_friend=True, comments=True, comment_vote=True,
+                    comment_friend=True):
+        """
+        1) go to his url with yours useragent, wait random
+        2) random check comments and random check more comments
+        3) random go to link in comments
+        :param post:
+        :return:
+        """
+        res = requests.get(post.url, headers={"User-Agent": self._login.get("User-Agent")})
+        log.info("SEE POST result: %s" % res)
+        wt = random.randint(1, 60)
+        log.info("wait time: %s" % wt)
+        time.sleep(wt)
+        if comments and random.randint(0, 10) > 7 and wt > 5:  # go to post comments
+            for comment in post.comments:
+                if comment_vote and random.randint(0, 10) >= 8 and self.can_do("vote"):  # voting comment
+                    vote_count = random.choice[1, -1]
+                    comment.vote(vote_count)
+                    self.c_vote_comment += 1
+                    if comment_friend and random.randint(0, 10) >= 5 and vote_count > 0:  # friend comment author
+                        c_author = comment.author
+                        if c_author.name not in self.friends:
+                            c_author.friend()
+                            self.friends.add(c_author.name)
+
+                if random.randint(0, 10) >= 8:  # go to url in comment
+                    urls = re_url.findall(comment.body)
+                    for url in urls:
+                        res = requests.get(url, headers={"User-Agent": self._login.get("User-Agent")})
+                        log.info("SEE Comment link result: %s", res)
+                        self.r_cur += 1
+
+        if subscribe and random.randint(0,10) >= 9 and \
+                        post.subreddit.fullname not in self.subscribed_subreddits:  # subscribe sbrdt
+            self.reddit.subscribe(post.subeddit)
+            self.subscribed_subreddits.add(post.subreddit.fullname)
+            self.ss += 1
+
+        if author_friend and random.randint(0,
+                                            10) >= 9 and post.author.fullname not in self.friends:  # friend post author
+            post.author.friend()
+            self.friends.add(post.author.fullname)
+            self.r_caf += 1
+
+        self.c_read_post += 1
+
+    def _get_random_near(self, slice, index):
+        count_left = len(slice[0:index])
+        count_right = len(slice[index:])
+        count_random_left = random.randint(count_left / 5, count_left / 2)
+        count_random_right = random.randint(count_right / 5, count_right / 2)
+
+        return [random.choice(slice[0:index]) for _ in xrange(count_random_left)], \
+               [random.choice(slice[index:]) for _ in xrange(count_random_right)]
+
+    def do_comment_post(self, post, comment_text):
+        sbrdt = post.subreddit
+        near_posts = _get_hot_and_new(sbrdt)
+        for i, _post in enumerate(near_posts):
+            if _post.fullname == post.fullname:
+                see_left, see_right = self._get_random_near(near_posts, i)
+                for p_ind in see_left:
+                    self.do_see_post(p_ind)
+                post.comment(comment_text)
+                for p_ind in see_right:
+                    self.do_see_post(p_ind)
+
+        if random.randint(0, 10) > 7 and sbrdt.fullname not in self.subscribed_subreddits:
+            self.reddit.subscribe(sbrdt)
+
+    def is_shadowbanned(self):
+        self.mutex.acquire()
+        result = self.login_provider.check_current_login()
+        self.mutex.release()
+        return result
 
 
 if __name__ == '__main__':
-    bot = None
-    try:
-        bot = RedditBot(logins=None, subreddits=["videos"])
-        # stat_thread = StatWorker(bot)
-        # stat_thread.setDaemon(True)
-        # stat_thread.start()
+    rbot = RedditReadBot(["videos"])
+    wbot = RedditWriteBot(["videos"])
 
-        bot.do_comment()
-        stat_fn(bot, "comment")
-
-        bot.do_vote_post()
-        stat_fn(bot, "vote_post")
-
-        bot.do_vote_comment()
-        stat_fn(bot, "vote_comment")
-
-    except Exception as e:
-        log.exception(e)
-        stat_fn(bot, "exception", type="error", exception=e.message, stacktrace=traceback.format_exc())
-
-        # lp = loginsProvider()
-        # lp.check_current_login()
+    post, text = rbot.find_comment()
+    wbot.do_comment_post(post, text)

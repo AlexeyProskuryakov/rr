@@ -66,9 +66,15 @@ class DBHandler(object):
 
         self.reddit_logins = db.get_collection("reddit_logins")
 
-    def save_reddit_login(self, login, password):
-        self.reddit_logins.insert_one({"login": login, "password": password})
+    def save_reddit_login(self, login_name, password):
+        self.reddit_logins.insert_one({"login_name": login_name, "password": password})
 
+    def update_reddit_login(self, login_name, update):
+        if update:
+            self.reddit_logins.update_one({"login_name": login_name}, {"$set": update})
+
+    def get_reddit_login(self, login_name):
+        return self.reddit_logins.find_one({"login_name": login_name})
 
     def get_reddit_logins(self, q=None):
         query = q or {}
