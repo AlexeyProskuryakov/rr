@@ -35,6 +35,7 @@ post_info = lambda post: {"fullname": post.fullname, "url": post.url}
 
 db = DBHandler()
 
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36"
 
 def _so_long(created, min_time):
     return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
@@ -82,11 +83,13 @@ class loginsProvider(object):
         """
         self.last_time = datetime.now()
         self.logins = login or {
-            self.last_time: {'login': "4ikist", "password": "sederfes", "User-Agent": "fooo bar baz"}}
+            self.last_time: {'login': "4ikist", "password": "sederfes", "User-Agent": DEFAULT_USER_AGENT}}
         if logins_list and isinstance(logins_list, list):
             self.add_logins(logins_list)
         self.ensure_times()
         self.current_login = self.get_early_login()
+        db.save_reddit_login(self.current_login.get("login"),self.current_login.get("password"))
+        db.update_reddit_login("4ikist", {"User-Agent":DEFAULT_USER_AGENT, "last_use":time.time()})
 
     def ensure_times(self):
         self._times = dict(map(lambda el: (el[1]['login'], el[0]), self.logins.items()))
@@ -197,7 +200,7 @@ class RedditReadBot(RedditBot):
                 used_subreddits.add(subreddit)
 
             self.current_subreddit = subreddit
-            all_posts = self.get_hot_and_new(self.reddit.get_subreddit(subreddit_name=subreddit), sort=cmp_by_created_utc)
+            all_posts = self.get_hot_and_new(subreddit, sort=cmp_by_created_utc)
             for post in all_posts:
                 if self.last_actions.is_acted(A_COMMENT, post.fullname) or post.url in self.low_copies_posts:
                     continue
@@ -216,7 +219,7 @@ class RedditReadBot(RedditBot):
                                     lambda x: x.body if not isinstance(x, MoreComments) else "",
                                     post_comments
                             )):
-                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
+                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post.fullname, subreddit))
                                 return post.fullname, comment
                 else:
                     self.low_copies_posts.add(post.url)
@@ -282,6 +285,8 @@ class RedditWriteBot(RedditBot):
         self.c_comment_post = 0
 
         self.action_function_params = {}
+        self.init_work_cycle()
+        log.info("Write bot [%s] inited \n %s"%(self._login, self.action_function_params))
 
     def change_login(self):
         self._login = self.login_provider.get_early_login()
@@ -290,41 +295,15 @@ class RedditWriteBot(RedditBot):
         self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
         log.info("bot [%s] connected" % self._login.get("login"))
 
-    def do_vote_post(self):
-        while 1:
-            subreddit = self.reddit.get_random_subreddit()
-            self.s_c_rs += 1
-            for post in subreddit.get_hot():
-                if self.last_actions.is_acted(A_VOTE, post.fullname):
-                    continue
-                vote_dir = random.choice([1, -1])
-                post.vote(vote_dir)
-                log.info("vote %s post: %s subreddit %s" % (vote_dir, post, subreddit))
-                self.last_actions.set_action(A_VOTE, post.fullname, post_info(post))
-                return
-
-    def do_vote_comment(self, post=None):
-        if post:
-            comment = random.choice(post.comments)
-        else:
-            subreddit = self.reddit.get_random_subreddit()
-            posts = list(subreddit.get_hot())
-            post = random.choice(posts)
-            comment = random.choice(post.comments)
-
-        vote_dir = random.choice([1, -1])
-        comment.vote(vote_dir)
-        log.info("vote %s comment: %s subreddit %s" % (vote_dir, comment, comment.submission))
-        self.last_actions.set_action(A_VOTE, comment.fullname)
 
     def do_posting(self):
         pass
 
     def init_work_cycle(self):
-        consuming = random.randint(70, 100)
+        consuming = random.randint(70, 90)
         production = 100 - consuming
 
-        prod_voting = random.randint(60, 100)
+        prod_voting = random.randint(60, 95)
         prod_commenting = 100 - prod_voting
 
         production_voting = (prod_voting * production) / 100
@@ -339,7 +318,7 @@ class RedditWriteBot(RedditBot):
         :param action: can be: [vote, comment, consume]
         :return:  true or false
         """
-        self.mutex.acquire()
+
         summ = self.c_vote_comment + self.c_comment_post + self.c_read_post
         interested_count = 0
         if action == "vote":
@@ -350,8 +329,8 @@ class RedditWriteBot(RedditBot):
             interested_count = self.c_read_post
 
         granted_perc = self.action_function_params.get(action)
-        current_perc = (summ / interested_count) * 100
-        self.mutex.release()
+        current_perc = int(((float(summ) if summ else 1.0 )/ (interested_count if interested_count else 100.0)) * 100)
+
         return current_perc <= granted_perc
 
     def add_post_to_comment(self, subreddit_name, post_fullname, comment_text):
@@ -363,8 +342,8 @@ class RedditWriteBot(RedditBot):
     def process_work_cycle(self, subreddit_name, url_for_video):
         pass
 
-    def do_see_post(self, post, subscribe=True, author_friend=True, comments=True, comment_vote=True,
-                    comment_friend=True):
+    def do_see_post(self, post, subscribe=9, author_friend=9, comments=7, comment_vote=8,
+                    comment_friend=7, post_vote=6, max_wait_time=30):
         """
         1) go to his url with yours useragent, wait random
         2) random check comments and random check more comments
@@ -372,18 +351,25 @@ class RedditWriteBot(RedditBot):
         :param post:
         :return:
         """
-        res = requests.get(post.url, headers={"User-Agent": self._login.get("User-Agent")})
-        log.info("SEE POST result: %s" % res)
-        wt = random.randint(1, 60)
+        try:
+            res = requests.get(post.url, headers={"User-Agent": self._login.get("User-Agent")})
+            log.info("SEE POST result: %s" % res)
+        except Exception as e:
+            log.warning("Can not see post %s url %s \n:("%(post.fullname, post.url))
+        wt = random.randint(1, max_wait_time)
         log.info("wait time: %s" % wt)
         time.sleep(wt)
-        if comments and random.randint(0, 10) > 7 and wt > 5:  # go to post comments
+        if post_vote and random.randint(0, 10) > post_vote and self.can_do("vote"):
+            vote_count = random.choice([1, -1])
+            post.vote(vote_count)
+
+        if comments and random.randint(0, 10) > comments and wt > 5:  # go to post comments
             for comment in post.comments:
-                if comment_vote and random.randint(0, 10) >= 8 and self.can_do("vote"):  # voting comment
-                    vote_count = random.choice[1, -1]
+                if comment_vote and random.randint(0, 10) >= comment_vote and self.can_do("vote"):  # voting comment
+                    vote_count = random.choice([1, -1])
                     comment.vote(vote_count)
                     self.c_vote_comment += 1
-                    if comment_friend and random.randint(0, 10) >= 5 and vote_count > 0:  # friend comment author
+                    if comment_friend and random.randint(0, 10) >= comment_friend and vote_count > 0:  # friend comment author
                         c_author = comment.author
                         if c_author.name not in self.friends:
                             c_author.friend()
@@ -396,39 +382,47 @@ class RedditWriteBot(RedditBot):
                         log.info("SEE Comment link result: %s", res)
                         self.r_cur += 1
 
-        if subscribe and random.randint(0, 10) >= 9 and \
-                        post.subreddit.fullname not in self.subscribed_subreddits:  # subscribe sbrdt
-            self.reddit.subscribe(post.subeddit)
-            self.subscribed_subreddits.add(post.subreddit.fullname)
+        if subscribe and random.randint(0, 10) >= subscribe and \
+                        post.subreddit.display_name not in self.subscribed_subreddits:  # subscribe sbrdt
+            self.reddit.subscribe(post.subreddit.display_name)
+            self.subscribed_subreddits.add(post.subreddit.display_name)
             self.ss += 1
 
         if author_friend and random.randint(0,
-                                            10) >= 9 and post.author.fullname not in self.friends:  # friend post author
+                                            10) >= author_friend and post.author.fullname not in self.friends:  # friend post author
             post.author.friend()
             self.friends.add(post.author.fullname)
             self.r_caf += 1
 
         self.c_read_post += 1
 
-    def _get_random_near(self, slice, index):
-        count_left = len(slice[0:index])
-        count_right = len(slice[index:])
-        count_random_left = random.randint(count_left / 5, count_left / 2)
-        count_random_right = random.randint(count_right / 5, count_right / 2)
+    def _get_random_near(self, slice, index, max):
+        rnd = lambda x : random.randint(x / 10, x / 2) or 1
+        max_ = lambda x: x if x < max and max_ != -1  else max
+        count_random_left  = max_(rnd(len(slice[0:index])))
+        count_random_right = max_(rnd(len(slice[index:])))
 
         return [random.choice(slice[0:index]) for _ in xrange(count_random_left)], \
                [random.choice(slice[index:]) for _ in xrange(count_random_right)]
 
-    def do_comment_post(self, post_fullname,  subreddit_name, comment_text):
+    def do_comment_post(self, post_fullname, subreddit_name, comment_text, max_post_near=3, max_wait_time=20, **kwargs):
         near_posts = self.get_hot_and_new(subreddit_name)
         for i, _post in enumerate(near_posts):
             if _post.fullname == post_fullname:
-                see_left, see_right = self._get_random_near(near_posts, i)
+                see_left, see_right = self._get_random_near(near_posts, i, random.randint(1,4))
                 for p_ind in see_left:
-                    self.do_see_post(p_ind)
+                    self.do_see_post(p_ind, max_wait_time=max_wait_time, **kwargs)
+
+                for comment in filter(lambda comment: isinstance(comment, MoreComments),_post.comments):
+                        etc = comment.comments()
+                        print etc
+                        if random.randint(0,10) > 6:
+                            break
+
                 _post.comment(comment_text)
+
                 for p_ind in see_right:
-                    self.do_see_post(p_ind)
+                    self.do_see_post(p_ind, max_wait_time=max_wait_time, **kwargs)
 
         if random.randint(0, 10) > 7 and subreddit_name not in self.subscribed_subreddits:
             self.reddit.subscribe(subreddit_name)
@@ -441,9 +435,9 @@ class RedditWriteBot(RedditBot):
 
 
 if __name__ == '__main__':
-    rbot = RedditReadBot(["videos"])
+    # rbot = RedditReadBot(["videos"])
     wbot = RedditWriteBot(["videos"])
 
     subreddit = "videos"
-    post_fullname, text = rbot.find_comment(subreddit)
-    wbot.do_comment_post(post_fullname, subreddit, text)
+    post_fullname, text = "t3_3z55u8", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)" #rbot.find_comment(subreddit)
+    wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2,  subscribe=1, author_friend=1, comments=1, comment_vote=1, comment_friend=1, post_vote=1,)
