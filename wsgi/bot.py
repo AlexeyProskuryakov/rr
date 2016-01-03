@@ -14,7 +14,6 @@ from wsgi.engine import net_tryings
 
 re_url = re.compile("((https?|ftp)://|www\.)[^\s/$.?#].[^\s]*")
 
-
 log = properties.logger.getChild("reddit-bot")
 
 A_POST = "post"
@@ -39,19 +38,6 @@ db = DBHandler()
 
 def _so_long(created, min_time):
     return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
-
-
-def _get_hot_and_new(subreddit, sort=None):
-    hot = list(subreddit.get_hot(limit=DEFAULT_LIMIT))
-    new = list(subreddit.get_new(limit=DEFAULT_LIMIT))
-    hot_d = dict(map(lambda x: (x.fullname, x), hot))
-    new_d = dict(map(lambda x: (x.fullname, x), new))
-    hot_d.update(new_d)
-    log.info("Will search for dest posts candidates at %s posts" % len(hot_d))
-    result = hot_d.values()
-    if sort:
-        result.sort(cmp=sort)
-    return result
 
 
 class ActionsHandler(object):
@@ -147,6 +133,19 @@ class RedditBot(object):
 
         self.reddit = praw.Reddit(user_agent=user_agent or "Reddit search bot")
 
+    def get_hot_and_new(self, subreddit_name, sort=None):
+        subreddit = self.reddit.get_subreddit(subreddit_name)
+        hot = list(subreddit.get_hot(limit=DEFAULT_LIMIT))
+        new = list(subreddit.get_new(limit=DEFAULT_LIMIT))
+        hot_d = dict(map(lambda x: (x.fullname, x), hot))
+        new_d = dict(map(lambda x: (x.fullname, x), new))
+        hot_d.update(new_d)
+        log.info("Will search for dest posts candidates at %s posts" % len(hot_d))
+        result = hot_d.values()
+        if sort:
+            result.sort(cmp=sort)
+        return result
+
     @property
     def current_subreddit(self):
         self.mutex.acquire()
@@ -198,7 +197,7 @@ class RedditReadBot(RedditBot):
                 used_subreddits.add(subreddit)
 
             self.current_subreddit = subreddit
-            all_posts = _get_hot_and_new(self.reddit.get_subreddit(subreddit_name=subreddit), sort=cmp_by_created_utc)
+            all_posts = self.get_hot_and_new(self.reddit.get_subreddit(subreddit_name=subreddit), sort=cmp_by_created_utc)
             for post in all_posts:
                 if self.last_actions.is_acted(A_COMMENT, post.fullname) or post.url in self.low_copies_posts:
                     continue
@@ -218,7 +217,7 @@ class RedditReadBot(RedditBot):
                                     post_comments
                             )):
                                 log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post, subreddit))
-                                return post, comment
+                                return post.fullname, comment
                 else:
                     self.low_copies_posts.add(post.url)
 
@@ -397,7 +396,7 @@ class RedditWriteBot(RedditBot):
                         log.info("SEE Comment link result: %s", res)
                         self.r_cur += 1
 
-        if subscribe and random.randint(0,10) >= 9 and \
+        if subscribe and random.randint(0, 10) >= 9 and \
                         post.subreddit.fullname not in self.subscribed_subreddits:  # subscribe sbrdt
             self.reddit.subscribe(post.subeddit)
             self.subscribed_subreddits.add(post.subreddit.fullname)
@@ -420,20 +419,19 @@ class RedditWriteBot(RedditBot):
         return [random.choice(slice[0:index]) for _ in xrange(count_random_left)], \
                [random.choice(slice[index:]) for _ in xrange(count_random_right)]
 
-    def do_comment_post(self, post, comment_text):
-        sbrdt = post.subreddit
-        near_posts = _get_hot_and_new(sbrdt)
+    def do_comment_post(self, post_fullname,  subreddit_name, comment_text):
+        near_posts = self.get_hot_and_new(subreddit_name)
         for i, _post in enumerate(near_posts):
-            if _post.fullname == post.fullname:
+            if _post.fullname == post_fullname:
                 see_left, see_right = self._get_random_near(near_posts, i)
                 for p_ind in see_left:
                     self.do_see_post(p_ind)
-                post.comment(comment_text)
+                _post.comment(comment_text)
                 for p_ind in see_right:
                     self.do_see_post(p_ind)
 
-        if random.randint(0, 10) > 7 and sbrdt.fullname not in self.subscribed_subreddits:
-            self.reddit.subscribe(sbrdt)
+        if random.randint(0, 10) > 7 and subreddit_name not in self.subscribed_subreddits:
+            self.reddit.subscribe(subreddit_name)
 
     def is_shadowbanned(self):
         self.mutex.acquire()
@@ -446,5 +444,6 @@ if __name__ == '__main__':
     rbot = RedditReadBot(["videos"])
     wbot = RedditWriteBot(["videos"])
 
-    post, text = rbot.find_comment()
-    wbot.do_comment_post(post, text)
+    subreddit = "videos"
+    post_fullname, text = rbot.find_comment(subreddit)
+    wbot.do_comment_post(post_fullname, subreddit, text)
