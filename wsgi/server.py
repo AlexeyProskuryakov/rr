@@ -387,17 +387,17 @@ def reddit_logins():
     if request.method == "GET":
         return render_template("")
 
-# spw = SubredditProcessWorker(tq, rq, db)
-# spw.daemon = True
-# spw.start()
-#
-# su = SubredditUpdater(tq, db)
-# su.daemon = True
-# su.start()
-#
-# pu = PostUpdater(db)
-# pu.daemon = True
-# pu.start()
+spw = SubredditProcessWorker(tq, rq, db)
+spw.daemon = True
+spw.start()
+
+su = SubredditUpdater(tq, db)
+su.daemon = True
+su.start()
+
+pu = PostUpdater(db)
+pu.daemon = True
+pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)
