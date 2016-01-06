@@ -66,6 +66,23 @@ class DBHandler(object):
 
         self.reddit_logins = db.get_collection("reddit_logins")
 
+        self.access_credentials = db.get_collection("access_credentials")
+
+    def update_access_credentials_info(self, user, info):
+        self.access_credentials.find_and_modify({"user": user}, {"$set": {"info": info, "time": time.time()}})
+
+    def prepare_access_credentials(self, client_id, client_secret, user, pwd):
+        self.access_credentials.insert_one(
+                {"client_id": client_id,
+                 "client_secret": client_secret,
+                 "user": user,
+                 "pwd": pwd
+                 })
+
+    def get_access_credentials(self, user):
+        result = self.access_credentials.find_one({"user": user})
+        return result
+
     def save_reddit_login(self, login_name, password):
         self.reddit_logins.insert_one({"login_name": login_name, "password": password})
 
@@ -235,7 +252,7 @@ class DBHandler(object):
         self.statistics_cache['data'] = None
 
     def get_subreddists_statistic(self):
-        if self.statistics_cache['last_update'] + 3.0 > time.time() and self.statistics_cache.get('data'):
+        if self.statistics_cache['last_update'] + 60.0 > time.time() and self.statistics_cache.get('data'):
             return self.statistics_cache['data']
         else:
             self.statistics_cache['last_update'] = time.time()

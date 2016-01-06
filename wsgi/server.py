@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from multiprocessing import Queue
 import os
+
+import praw
 from flask import Flask, render_template, request, url_for, logging, session, g
 from flask.json import jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user
@@ -106,7 +108,7 @@ class UsersHandler(object):
 
 usersHandler = UsersHandler()
 log.info("users handler was initted")
-usersHandler.add_user(User("3030", "1"))
+usersHandler.add_user(User("3030", "89231950908zozo"))
 
 
 @app.before_request
@@ -383,22 +385,63 @@ def reddit_logins():
         login = form.get("login")
         password = form.get("password")
 
-        return jsonify(**{"ok":True})
+        return jsonify(**{"ok": True})
     if request.method == "GET":
         return render_template("")
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
 
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
+REDIRECT_URI = "http://127.0.0.1:65010/authorize_callback"
+C_ID = None
+C_SECRET = None
 
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+@login_required
+@app.route("/bot/add_credential", methods=["GET", "POST"])
+def bot_auth_start():
+    if request.method == "GET":
+        return render_template("bot_add_credentials.html", **{"url": False, "r_u":REDIRECT_URI})
+    if request.method == "POST":
+        global C_ID
+        global C_SECRET
+        C_ID = request.form.get("client_id")
+        C_SECRET = request.form.get("client_secret")
+        user = request.form.get("user")
+        pwd = request.form.get("pwd")
+
+        db.prepare_access_credentials(C_ID, C_SECRET, user, pwd)
+
+        r = praw.Reddit("Hui")
+        r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
+        url = r.get_authorize_url("KEY", 'identity,edit,submit,subscribe,vote', refreshable=True)
+        return render_template("bot_add_credentials.html", **{"url": url, "r_u":REDIRECT_URI})
+
+
+@login_required
+@app.route("/authorize_callback")
+def bot_auth_end():
+    state = request.args.get('state', '')
+    code = request.args.get('code', '')
+
+    r = praw.Reddit("Hui")
+    r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
+    info = r.get_access_information(code)
+    user = r.get_me()
+    info['scope'] = list(info['scope'])
+    db.update_access_credentials_info(user.name, info)
+    return render_template("authorize_callback.html", **{"user":user.name, "state":state, "info":info})
+
+
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)
-    app.run(port=5000)
+    app.run(port=65010)

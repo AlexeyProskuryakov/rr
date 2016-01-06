@@ -15,6 +15,8 @@ def module_path():
 
 
 log_file = os.path.join(module_path(), 'result.log')
+cacert_file = os.path.join(module_path(), 'cacert.pem')
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler(log_file)

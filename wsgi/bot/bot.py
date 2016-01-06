@@ -1,11 +1,14 @@
+import urlparse
 from collections import defaultdict
 from datetime import datetime
+from lxml import html
 from multiprocessing import Lock, Queue
 import praw
 from praw.objects import MoreComments
 import random
 import re
 import requests
+import requests.auth
 import time
 
 from wsgi import properties
@@ -36,6 +39,7 @@ post_info = lambda post: {"fullname": post.fullname, "url": post.url}
 db = DBHandler()
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36"
+
 
 def _so_long(created, min_time):
     return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
@@ -88,8 +92,8 @@ class loginsProvider(object):
             self.add_logins(logins_list)
         self.ensure_times()
         self.current_login = self.get_early_login()
-        db.save_reddit_login(self.current_login.get("login"),self.current_login.get("password"))
-        db.update_reddit_login("4ikist", {"User-Agent":DEFAULT_USER_AGENT, "last_use":time.time()})
+        db.save_reddit_login(self.current_login.get("login"), self.current_login.get("password"))
+        db.update_reddit_login("4ikist", {"User-Agent": DEFAULT_USER_AGENT, "last_use": time.time()})
 
     def ensure_times(self):
         self._times = dict(map(lambda el: (el[1]['login'], el[0]), self.logins.items()))
@@ -219,7 +223,8 @@ class RedditReadBot(RedditBot):
                                     lambda x: x.body if not isinstance(x, MoreComments) else "",
                                     post_comments
                             )):
-                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (comment, post.fullname, subreddit))
+                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (
+                                comment, post.fullname, subreddit))
                                 return post.fullname, comment
                 else:
                     self.low_copies_posts.add(post.url)
@@ -259,8 +264,15 @@ class RedditReadBot(RedditBot):
         return result
 
 
+def get_params(doc, xpath, acc):
+    for el in doc.xpath(xpath):
+        if el.value:
+            acc[el.attrib.get("name")] = el.value
+    return acc
+
+
 class RedditWriteBot(RedditBot):
-    def __init__(self, subreddits, login=None, logins=None):
+    def __init__(self, subreddits, login=None, logins=None, client_id=None, client_secret=None, redirect_uri=None):
         """
         :param logins: list of
         :param subreddits:
@@ -276,6 +288,7 @@ class RedditWriteBot(RedditBot):
             self._login = login
 
         self.comments_queue = Queue()
+
         self.r_caf = 0
         self.r_cur = 0
         self.ss = 0
@@ -286,7 +299,95 @@ class RedditWriteBot(RedditBot):
 
         self.action_function_params = {}
         self.init_work_cycle()
-        log.info("Write bot [%s] inited \n %s"%(self._login, self.action_function_params))
+
+        if client_id and client_secret:
+            self.reddit.set_oauth_app_info(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
+            url = self.reddit.get_authorize_url('uniqueKey', 'identity,edit,submit,subscribe,vote', refreshable=True)
+
+            # client_auth = requests.auth.HTTPBasicAuth(client_id, client_secret)
+            # post_data = {"grant_type": "password", "username": "Shlak2k15", "password": "sederfes100500"}
+            # headers = {"User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1"}
+            # response = requests.post("https://www.reddit.com/api/v1/access_token", auth=client_auth, data=post_data, headers=headers)
+            # result = response.json()
+
+            s = requests.Session()
+            s.verify = properties.cacert_file
+            s.headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1"
+            }
+            #code down is emulate of browser
+            result = s.get(url)
+            if result.status_code == 200:
+                doc = html.document_fromstring(result.content)
+                # checking if user not auth
+                if "sign up or log in" in doc.xpath("//title")[0].text:
+                    form_login_params = get_params(doc, "//form[@id='login-form']/input", {})
+                    form_login_params = get_params(doc, "//form[@id='login-form']//input", form_login_params)
+                    form_login_params["user"] = "Shlak2k15"
+                    form_login_params["passwd"] = "sederfes100500"
+                    form_login_params["rem"] = ""
+
+                    form_url = doc.xpath('//form[@id="login-form"]')[0].attrib.get('action')
+                    result_login = s.post(form_url, form_login_params)
+                    s.cookies = result_login.cookies
+                    doc = html.document_fromstring(result_login.content)
+                    # url = result_login.url
+
+                form_access_params = get_params(doc, '//form[@class="pretty-form"]/input', {})
+                form_access_params = get_params(doc, '//form[@class="pretty-form"]//input', form_access_params)
+
+                form_url = doc.xpath('//form[@class="pretty-form"]')[0].attrib.get('action')
+                result = s.post("https://www.reddit.com"+form_url, form_access_params)
+
+            access_credentials = self.reddit.get_access_information(result.get("access_token"))
+            self.reddit.set_access_credentials(**access_credentials)
+            authenticated_user = self.reddit.get_me()
+
+            print authenticated_user.name, authenticated_user.link_karma
+
+            self.reddit.refresh_access_information("oGeBJexroWdeAco1yhDZnCSj8kQ")
+
+        log.info("Write bot [%s] inited \n %s" % (self._login, self.action_function_params))
+
+    def __auth(self, vk_login):
+        """
+        authenticate in vk with dirty hacks
+        :return: access token
+        """
+        # process first page
+        s = requests.Session()
+        s.verify = properties.certs_path
+        result = s.get('https://oauth.vk.com/authorize', params=properties.vk_access_credentials)
+        doc = html.document_fromstring(result.content)
+        inputs = doc.xpath('//form[@class="pretty-form"]/input')
+        form_params = {}
+        for el in inputs:
+            form_params[el.attrib.get('name')] = el.value
+        form_params['email'] = vk_login
+        form_params['pass'] = properties.vk_pass
+        form_url = doc.xpath('//form')[0].attrib.get('action')
+        # process second page
+        result = s.post(form_url, form_params)
+        doc = html.document_fromstring(result.content)
+        # if already login
+        if 'OAuth Blank' not in doc.xpath('//title')[0].text:
+            submit_url = doc.xpath('//form')[0].attrib.get('action')
+            result = s.post(submit_url, cookies=result.cookies)
+
+        # retrieving access token from url
+        parsed_url = urlparse.urlparse(result.url)
+        if 'error' in parsed_url.query:
+            log.error('error in authenticate \n%s' % parsed_url.query)
+            raise Exception(dict([el.split('=') for el in parsed_url.query.split('&')]))
+
+        fragment = parsed_url.fragment
+        access_token = dict([el.split('=') for el in fragment.split('&')])
+        access_token['init_time'] = datetime.datetime.now()
+        access_token['expires_in'] = float(access_token['expires_in'])
+        access_token['login'] = vk_login
+        # self.log.info('get access token: \n%s' % access_token)
+        self.log.info('vkontakte authenticate for %s' % vk_login)
+        return access_token
 
     def change_login(self):
         self._login = self.login_provider.get_early_login()
@@ -294,7 +395,6 @@ class RedditWriteBot(RedditBot):
                 user_agent=self._login.get("User-Agent"))
         self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
         log.info("bot [%s] connected" % self._login.get("login"))
-
 
     def do_posting(self):
         pass
@@ -329,7 +429,7 @@ class RedditWriteBot(RedditBot):
             interested_count = self.c_read_post
 
         granted_perc = self.action_function_params.get(action)
-        current_perc = int(((float(summ) if summ else 1.0 )/ (interested_count if interested_count else 100.0)) * 100)
+        current_perc = int(((float(summ) if summ else 1.0) / (interested_count if interested_count else 100.0)) * 100)
 
         return current_perc <= granted_perc
 
@@ -355,7 +455,7 @@ class RedditWriteBot(RedditBot):
             res = requests.get(post.url, headers={"User-Agent": self._login.get("User-Agent")})
             log.info("SEE POST result: %s" % res)
         except Exception as e:
-            log.warning("Can not see post %s url %s \n:("%(post.fullname, post.url))
+            log.warning("Can not see post %s url %s \n:(" % (post.fullname, post.url))
         wt = random.randint(1, max_wait_time)
         log.info("wait time: %s" % wt)
         time.sleep(wt)
@@ -369,7 +469,8 @@ class RedditWriteBot(RedditBot):
                     vote_count = random.choice([1, -1])
                     comment.vote(vote_count)
                     self.c_vote_comment += 1
-                    if comment_friend and random.randint(0, 10) >= comment_friend and vote_count > 0:  # friend comment author
+                    if comment_friend and random.randint(0,
+                                                         10) >= comment_friend and vote_count > 0:  # friend comment author
                         c_author = comment.author
                         if c_author.name not in self.friends:
                             c_author.friend()
@@ -397,9 +498,9 @@ class RedditWriteBot(RedditBot):
         self.c_read_post += 1
 
     def _get_random_near(self, slice, index, max):
-        rnd = lambda x : random.randint(x / 10, x / 2) or 1
+        rnd = lambda x: random.randint(x / 10, x / 2) or 1
         max_ = lambda x: x if x < max and max_ != -1  else max
-        count_random_left  = max_(rnd(len(slice[0:index])))
+        count_random_left = max_(rnd(len(slice[0:index])))
         count_random_right = max_(rnd(len(slice[index:])))
 
         return [random.choice(slice[0:index]) for _ in xrange(count_random_left)], \
@@ -409,15 +510,15 @@ class RedditWriteBot(RedditBot):
         near_posts = self.get_hot_and_new(subreddit_name)
         for i, _post in enumerate(near_posts):
             if _post.fullname == post_fullname:
-                see_left, see_right = self._get_random_near(near_posts, i, random.randint(1,4))
+                see_left, see_right = self._get_random_near(near_posts, i, random.randint(1, 4))
                 for p_ind in see_left:
                     self.do_see_post(p_ind, max_wait_time=max_wait_time, **kwargs)
 
-                for comment in filter(lambda comment: isinstance(comment, MoreComments),_post.comments):
-                        etc = comment.comments()
-                        print etc
-                        if random.randint(0,10) > 6:
-                            break
+                for comment in filter(lambda comment: isinstance(comment, MoreComments), _post.comments):
+                    etc = comment.comments()
+                    print etc
+                    if random.randint(0, 10) > 6:
+                        break
 
                 _post.comment(comment_text)
 
@@ -435,9 +536,14 @@ class RedditWriteBot(RedditBot):
 
 
 if __name__ == '__main__':
-    # rbot = RedditReadBot(["videos"])
-    wbot = RedditWriteBot(["videos"])
+    sbrdt = "videos"
+    rbot = RedditReadBot(["videos"])
+    # """client_id: O5AZrYjXI1R-7g
+    # """client_secret: LOsmYChS2dcdQIlkMG9peFR6Lns
+    wbot = RedditWriteBot(["videos"], client_id="O5AZrYjXI1R-7g", client_secret="LOsmYChS2dcdQIlkMG9peFR6Lns",
+                          redirect_uri="http://127.0.0.1:65010/authorize_callback")
 
     subreddit = "videos"
-    post_fullname, text = "t3_3z55u8", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)" #rbot.find_comment(subreddit)
-    wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2,  subscribe=1, author_friend=1, comments=1, comment_vote=1, comment_friend=1, post_vote=1,)
+    post_fullname, text = rbot.find_comment(subreddit)
+    wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2, subscribe=1, author_friend=1, comments=1,
+                         comment_vote=1, comment_friend=1, post_vote=1, )
