@@ -377,28 +377,16 @@ def search_load():
     return jsonify(**{"ok": True, "name": name})
 
 
-@login_required
-@app.route("/logins", methods=["GET", "POST"])
-def reddit_logins():
-    if request.method == "POST":
-        form = request.form
-        login = form.get("login")
-        password = form.get("password")
-
-        return jsonify(**{"ok": True})
-    if request.method == "GET":
-        return render_template("")
-
-
 REDIRECT_URI = "http://127.0.0.1:65010/authorize_callback"
 C_ID = None
 C_SECRET = None
+
 
 @login_required
 @app.route("/bot/add_credential", methods=["GET", "POST"])
 def bot_auth_start():
     if request.method == "GET":
-        return render_template("bot_add_credentials.html", **{"url": False, "r_u":REDIRECT_URI})
+        return render_template("bot_add_credentials.html", **{"url": False, "r_u": REDIRECT_URI})
     if request.method == "POST":
         global C_ID
         global C_SECRET
@@ -412,7 +400,7 @@ def bot_auth_start():
         r = praw.Reddit("Hui")
         r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
         url = r.get_authorize_url("KEY", 'identity,edit,submit,subscribe,vote', refreshable=True)
-        return render_template("bot_add_credentials.html", **{"url": url, "r_u":REDIRECT_URI})
+        return render_template("bot_add_credentials.html", **{"url": url, "r_u": REDIRECT_URI})
 
 
 @login_required
@@ -427,7 +415,12 @@ def bot_auth_end():
     user = r.get_me()
     info['scope'] = list(info['scope'])
     db.update_access_credentials_info(user.name, info)
-    return render_template("authorize_callback.html", **{"user":user.name, "state":state, "info":info})
+    return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info})
+
+
+@app.route("/wake_up/<salt>", methods=["POST"])
+def wake_up(salt):
+    return jsonify(**{"result": salt})
 
 
 spw = SubredditProcessWorker(tq, rq, db)

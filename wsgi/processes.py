@@ -4,7 +4,7 @@ from multiprocessing import Process
 from time import sleep
 from db import DBHandler
 from engine import Retriever, reddit_get_new, get_current_step, to_save, update_posts
-from properties import min_update_period, time_step_less_iteration_power, min_time_step, max_time_step
+from properties import min_update_period, min_time_step, max_time_step
 
 __author__ = 'alesha'
 

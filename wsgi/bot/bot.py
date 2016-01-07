@@ -264,13 +264,6 @@ class RedditReadBot(RedditBot):
         return result
 
 
-def get_params(doc, xpath, acc):
-    for el in doc.xpath(xpath):
-        if el.value:
-            acc[el.attrib.get("name")] = el.value
-    return acc
-
-
 class RedditWriteBot(RedditBot):
     def __init__(self, subreddits, login=None, logins=None, client_id=None, client_secret=None, redirect_uri=None):
         """
