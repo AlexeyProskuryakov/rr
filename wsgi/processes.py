@@ -72,7 +72,7 @@ class SubredditProcessWorker(Process):
                 self.db.update_subreddit_info(name, {"time_window": time_window,
                                                      "count_all_posts": len(posts),
                                                      "count_interested_posts": len(interested_posts),
-                                                     "stat": retriever.statistic,
+                                                     "statistic": retriever.statistic,
                                                      "head_post_id": interested_posts_ids[0]})
 
                 next_time_step = ensure_time_step(subreddit.get("head_post_id"),
@@ -138,8 +138,8 @@ def update_stored_posts(db, posts):
         subreddit = post.get("subreddit")
         if subreddit not in subreddits:
             sbrdt = db.get_subreddit(subreddit)
-            sbrdt_params = sbrdt.get("params")
-            if sbrdt and sbrdt_params:
+            if sbrdt and sbrdt.get("params"):
+                sbrdt_params = sbrdt.get("params")
                 subreddits[subreddit] = sbrdt_params
         posts_fullnames.append(post.get("fullname"))
 
@@ -147,16 +147,17 @@ def update_stored_posts(db, posts):
 
     for post in posts:
         sbrdt_params = subreddits.get(post.get("subreddit"))
-        retriever = Retriever()
-        processed_post = retriever.process_post(post,
-                                                sbrdt_params.get("reposts_max"),
-                                                sbrdt_params.get("rate_min"),
-                                                sbrdt_params.get("rate_max"),
-                                                None)
-        if processed_post:
-            db.update_post(to_save(processed_post))
-        else:
-            db.delete_post(post.get("fullname"), post.get("video_id"))
+        if sbrdt_params:
+            retriever = Retriever()
+            processed_post = retriever.process_post(post,
+                                                    sbrdt_params.get("reposts_max"),
+                                                    sbrdt_params.get("rate_min"),
+                                                    sbrdt_params.get("rate_max"),
+                                                    None)
+            if processed_post:
+                db.update_post(to_save(processed_post))
+            else:
+                db.delete_post(post.get("fullname"), post.get("video_id"))
 
 
 class PostUpdater(Process):

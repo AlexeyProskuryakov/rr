@@ -430,17 +430,17 @@ def bot_auth_end():
     return render_template("authorize_callback.html", **{"user":user.name, "state":state, "info":info})
 
 
-# spw = SubredditProcessWorker(tq, rq, db)
-# spw.daemon = True
-# spw.start()
-#
-# su = SubredditUpdater(tq, db)
-# su.daemon = True
-# su.start()
-#
-# pu = PostUpdater(db)
-# pu.daemon = True
-# pu.start()
+spw = SubredditProcessWorker(tq, rq, db)
+spw.daemon = True
+spw.start()
+
+su = SubredditUpdater(tq, db)
+su.daemon = True
+su.start()
+
+pu = PostUpdater(db)
+pu.daemon = True
+pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)

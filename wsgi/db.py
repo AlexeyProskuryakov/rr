@@ -3,7 +3,7 @@ import hashlib
 import logging
 import time
 import pymongo
-from bson import SON
+
 from pymongo import MongoClient
 from engine import get_interested_fields
 from properties import min_time_step
@@ -13,6 +13,12 @@ from wsgi.properties import SRC_SEARCH
 __author__ = 'alesha'
 
 log = logging.getLogger("DB")
+
+class StatisticsCache(object):
+    def __init__(self):
+        self.last_update = time.time()
+        self.data = {}
+
 
 
 class DBHandler(object):
@@ -32,7 +38,7 @@ class DBHandler(object):
         self.subreddits.create_index([("name", pymongo.ASCENDING)], unique=True)
         self.subreddits.create_index([("next_update", pymongo.ASCENDING)])
 
-        self.statistics_cache = {'last_update': time.time(), 'data': {}}
+        self.statistics_cache = StatisticsCache()
 
         self.users = db['users']
         self.users.create_index([("name", pymongo.ASCENDING)], unique=True)
@@ -249,13 +255,13 @@ class DBHandler(object):
         return result
 
     def restart_statistic_cache(self):
-        self.statistics_cache['data'] = None
+        self.statistics_cache = StatisticsCache()
 
     def get_subreddists_statistic(self):
-        if self.statistics_cache['last_update'] + 60.0 > time.time() and self.statistics_cache.get('data'):
-            return self.statistics_cache['data']
+        if self.statistics_cache.last_update + 60.0 > time.time() and self.statistics_cache.data:
+            return self.statistics_cache.data
         else:
-            self.statistics_cache['last_update'] = time.time()
+            self.statistics_cache.last_update = time.time()
 
         result = {}
         for subreddit in self.subreddits.find({}):
@@ -264,11 +270,11 @@ class DBHandler(object):
             el['count'] = self.posts.find({"subreddit": subreddit.get("name"), "deleted": {"$exists": False}}).count()
             el['time_window'] = subreddit.get("time_window")
             el['next_time_retrieve'] = datetime.fromtimestamp(subreddit.get('next_update'))
-            el['stat'] = subreddit.get("stat")
+            el['statistic'] = subreddit.get("statistic")
             el.update(subreddit.pop('params', {}))
             el.update(subreddit)
             result[el['name']] = el
 
-        self.statistics_cache['data'] = result
+        self.statistics_cache.data = result
 
         return result

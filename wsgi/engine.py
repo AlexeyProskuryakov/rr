@@ -11,7 +11,7 @@ import youtube
 log = logging.getLogger("engine")
 
 reddit = praw.Reddit(user_agent="foo")
-reddit.login("4ikist", "sederfes", disable_warning=True)
+
 log.info("reddit is connected")
 
 
@@ -123,11 +123,20 @@ def get_current_step(posts):
 
 
 def update_posts(fullnames):
+    def batch(iterable, n=1):
+        l = len(iterable)
+        for ndx in range(0, l, n):
+            yield iterable[ndx:min(ndx + n, l)]
+
     names = []
     for name in fullnames:
         if name.startswith("t1") or name.startswith("t3") or name.startswith("t5"):
             names.append(name)
-    return update_post(fullnames)
+    result = []
+    for names_batch in batch(names, 100):
+        result.extend(update_post(names_batch))
+
+    return result
 
 
 class Retriever(object):

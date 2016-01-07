@@ -349,46 +349,6 @@ class RedditWriteBot(RedditBot):
 
         log.info("Write bot [%s] inited \n %s" % (self._login, self.action_function_params))
 
-    def __auth(self, vk_login):
-        """
-        authenticate in vk with dirty hacks
-        :return: access token
-        """
-        # process first page
-        s = requests.Session()
-        s.verify = properties.certs_path
-        result = s.get('https://oauth.vk.com/authorize', params=properties.vk_access_credentials)
-        doc = html.document_fromstring(result.content)
-        inputs = doc.xpath('//form[@class="pretty-form"]/input')
-        form_params = {}
-        for el in inputs:
-            form_params[el.attrib.get('name')] = el.value
-        form_params['email'] = vk_login
-        form_params['pass'] = properties.vk_pass
-        form_url = doc.xpath('//form')[0].attrib.get('action')
-        # process second page
-        result = s.post(form_url, form_params)
-        doc = html.document_fromstring(result.content)
-        # if already login
-        if 'OAuth Blank' not in doc.xpath('//title')[0].text:
-            submit_url = doc.xpath('//form')[0].attrib.get('action')
-            result = s.post(submit_url, cookies=result.cookies)
-
-        # retrieving access token from url
-        parsed_url = urlparse.urlparse(result.url)
-        if 'error' in parsed_url.query:
-            log.error('error in authenticate \n%s' % parsed_url.query)
-            raise Exception(dict([el.split('=') for el in parsed_url.query.split('&')]))
-
-        fragment = parsed_url.fragment
-        access_token = dict([el.split('=') for el in fragment.split('&')])
-        access_token['init_time'] = datetime.datetime.now()
-        access_token['expires_in'] = float(access_token['expires_in'])
-        access_token['login'] = vk_login
-        # self.log.info('get access token: \n%s' % access_token)
-        self.log.info('vkontakte authenticate for %s' % vk_login)
-        return access_token
-
     def change_login(self):
         self._login = self.login_provider.get_early_login()
         self.reddit = praw.Reddit(
