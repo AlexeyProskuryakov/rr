@@ -435,6 +435,7 @@ pu = PostUpdater(db)
 pu.daemon = True
 pu.start()
 
+
 if __name__ == '__main__':
     print os.path.dirname(__file__)
     app.run(port=65010)
