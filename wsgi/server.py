@@ -17,6 +17,7 @@ from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, upd
 import properties
 from wsgi.engine import reddit_search, Retriever
 from wsgi.properties import SRC_SEARCH, SRC_OBSERV
+from wsgi.wake_up import WakeUp
 
 __author__ = '4ikist'
 
@@ -435,6 +436,19 @@ pu = PostUpdater(db)
 pu.daemon = True
 pu.start()
 
+
+url = "http://read-shlak0bl0k.rhcloud.com"
+wu = WakeUp(url)
+wu.daemon = True
+wu.start()
+
+@app.route("/wake_up")
+def index():
+    if request.method == "POST":
+        _url = request.form.get("url")
+        wu.what = _url
+    else:
+        return render_template("wake_up.html", **{"url": wu.what})
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)

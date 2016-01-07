@@ -1,12 +1,13 @@
+import logging
 import random
 import string
 from multiprocessing import Process
 import requests
 import time
 
-from wsgi import properties
+from flask import logging
 
-log = properties.logger.getChild("wake_up")
+log = logging.getLogger("wake_up")
 
 class WakeUp(Process):
     def __init__(self, what):
