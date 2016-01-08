@@ -40,6 +40,33 @@ db = DBHandler()
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36"
 
+USER_AGENTS = [
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0; chromeframe/12.0.742.112)",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET CLR 2.0.50727; Media Center PC 6.0)",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET CLR 2.0.50727; Media Center PC 6.0)",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0; .NET CLR 2.0.50727; SLCC2; .NET CLR 3.5.30729; .NET CLR 3.0.30729; Media Center PC 6.0; Zune 4.0; Tablet PC 2.0; InfoPath.3; .NET4.0C; .NET4.0E)",
+    "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; ru; rv:1.9.1.2) Gecko/20090729 Firefox/3.5.2",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30618; In",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0; SHC-KIOSK; SHC-Mac-5FE3; SHC-Unit-K0816; SHC-KMT; .NET C",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Trident/4.0; SLCC1; .NET CLR 2.0.50727; Media Center PC 5.0; InfoPath",
+    "Mozilla/5.0 (iPad; U; CPU OS 3_2 like Mac OS X; en-us) AppleWebKit/531.21.10 (KHTML, like Gecko) Version/4.0.4 Mobile/7B",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30618; In",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.1; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; .NET CLR 2.0.50727)",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; SLCC1; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR 3.0.30618; In",
+    "Mozilla/5.0 (webOS/1.4.3; U; en-US) AppleWebKit/532.2 (KHTML, like Gecko) Version/1.0 Safari/532.2 Pixi/1.1",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.1; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/533.16 (KHTML, like Gecko) Version/5.0 Safari/533.16",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 1.1.4322; .NET CLR 2.0.50727; .NET CLR 3.0.4506",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Trident/4.0; .NET CLR 1.1.4322; .NET CLR 2.0.50727; .NET CLR 3.0.4506",
+    "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.2.4) Gecko/20100611 Firefox/3.6.4 GTB7.0",
+    "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.1; Trident/4.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; .NET CLR",
+]
+
 
 def _so_long(created, min_time):
     return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
@@ -224,7 +251,7 @@ class RedditReadBot(RedditBot):
                                     post_comments
                             )):
                                 log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (
-                                comment, post.fullname, subreddit))
+                                    comment, post.fullname, subreddit))
                                 return post.fullname, comment
                 else:
                     self.low_copies_posts.add(post.url)
@@ -265,22 +292,14 @@ class RedditReadBot(RedditBot):
 
 
 class RedditWriteBot(RedditBot):
-    def __init__(self, subreddits, login=None, logins=None, client_id=None, client_secret=None, redirect_uri=None):
+    def __init__(self, subreddits, login_credentials):
         """
-        :param logins: list of
-        :param subreddits:
-        :param login:
+        :param subreddits: subbreddits which this bot will comment
+        :param login_credentials:  dict object with this attributes: client_id, client_secret, redirect_url, access_token, refresh_token, login and password of user and user_agent 
+         user agent can not present it will use some default user agent
         :return:
         """
         super(RedditWriteBot, self).__init__(subreddits)
-
-        self.login_provider = loginsProvider(login, logins)
-        if not login:
-            self.change_login()
-        else:
-            self._login = login
-
-        self.comments_queue = Queue()
 
         self.r_caf = 0
         self.r_cur = 0
@@ -292,65 +311,16 @@ class RedditWriteBot(RedditBot):
 
         self.action_function_params = {}
         self.init_work_cycle()
+        self.init_engine(login_credentials)
+        log.info("Write bot inited with params \n %s" % (login_credentials))
 
-        if client_id and client_secret:
-            self.reddit.set_oauth_app_info(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
-            url = self.reddit.get_authorize_url('uniqueKey', 'identity,edit,submit,subscribe,vote', refreshable=True)
-
-            # client_auth = requests.auth.HTTPBasicAuth(client_id, client_secret)
-            # post_data = {"grant_type": "password", "username": "Shlak2k15", "password": "sederfes100500"}
-            # headers = {"User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1"}
-            # response = requests.post("https://www.reddit.com/api/v1/access_token", auth=client_auth, data=post_data, headers=headers)
-            # result = response.json()
-
-            s = requests.Session()
-            s.verify = properties.cacert_file
-            s.headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1"
-            }
-            #code down is emulate of browser
-            result = s.get(url)
-            if result.status_code == 200:
-                doc = html.document_fromstring(result.content)
-                # checking if user not auth
-                if "sign up or log in" in doc.xpath("//title")[0].text:
-                    form_login_params = get_params(doc, "//form[@id='login-form']/input", {})
-                    form_login_params = get_params(doc, "//form[@id='login-form']//input", form_login_params)
-                    form_login_params["user"] = "Shlak2k15"
-                    form_login_params["passwd"] = "sederfes100500"
-                    form_login_params["rem"] = ""
-
-                    form_url = doc.xpath('//form[@id="login-form"]')[0].attrib.get('action')
-                    result_login = s.post(form_url, form_login_params)
-                    s.cookies = result_login.cookies
-                    doc = html.document_fromstring(result_login.content)
-                    # url = result_login.url
-
-                form_access_params = get_params(doc, '//form[@class="pretty-form"]/input', {})
-                form_access_params = get_params(doc, '//form[@class="pretty-form"]//input', form_access_params)
-
-                form_url = doc.xpath('//form[@class="pretty-form"]')[0].attrib.get('action')
-                result = s.post("https://www.reddit.com"+form_url, form_access_params)
-
-            access_credentials = self.reddit.get_access_information(result.get("access_token"))
-            self.reddit.set_access_credentials(**access_credentials)
-            authenticated_user = self.reddit.get_me()
-
-            print authenticated_user.name, authenticated_user.link_karma
-
-            self.reddit.refresh_access_information("oGeBJexroWdeAco1yhDZnCSj8kQ")
-
-        log.info("Write bot [%s] inited \n %s" % (self._login, self.action_function_params))
-
-    def change_login(self):
-        self._login = self.login_provider.get_early_login()
-        self.reddit = praw.Reddit(
-                user_agent=self._login.get("User-Agent"))
-        self.reddit.login(self._login.get("login"), password=self._login.get("password"), disable_warning=True)
-        log.info("bot [%s] connected" % self._login.get("login"))
-
-    def do_posting(self):
-        pass
+    def init_engine(self, login_credentials):
+        user_agent = login_credentials.get("user_agent", random.choice(USER_AGENTS))
+        r = praw.Reddit(user_agent)
+        r.set_oauth_app_info(login_credentials['client_id'], login_credentials['client_secret'], login_credentials['redirect_uri'])
+        r.set_access_credentials(**login_credentials.get("info"))
+        r.login(login_credentials["user"],login_credentials["pwd"])
+        self.reddit = r
 
     def init_work_cycle(self):
         consuming = random.randint(70, 90)
@@ -385,12 +355,6 @@ class RedditWriteBot(RedditBot):
         current_perc = int(((float(summ) if summ else 1.0) / (interested_count if interested_count else 100.0)) * 100)
 
         return current_perc <= granted_perc
-
-    def add_post_to_comment(self, subreddit_name, post_fullname, comment_text):
-        self.mutex.acquire()
-        self.comments_queue.put(
-                {"subreddit_name": subreddit_name, "post_fullname": post_fullname, "comment_text": comment_text})
-        self.mutex.release()
 
     def process_work_cycle(self, subreddit_name, url_for_video):
         pass
@@ -473,7 +437,7 @@ class RedditWriteBot(RedditBot):
                     if random.randint(0, 10) > 6:
                         break
 
-                _post.comment(comment_text)
+                _post.add_comment(comment_text)
 
                 for p_ind in see_right:
                     self.do_see_post(p_ind, max_wait_time=max_wait_time, **kwargs)
@@ -489,14 +453,17 @@ class RedditWriteBot(RedditBot):
 
 
 if __name__ == '__main__':
+    db = DBHandler()
     sbrdt = "videos"
     rbot = RedditReadBot(["videos"])
     # """client_id: O5AZrYjXI1R-7g
     # """client_secret: LOsmYChS2dcdQIlkMG9peFR6Lns
-    wbot = RedditWriteBot(["videos"], client_id="O5AZrYjXI1R-7g", client_secret="LOsmYChS2dcdQIlkMG9peFR6Lns",
-                          redirect_uri="http://127.0.0.1:65010/authorize_callback")
+    wbot = RedditWriteBot(["videos"], db.get_access_credentials("Shlak2k15"))
 
     subreddit = "videos"
-    post_fullname, text = rbot.find_comment(subreddit)
-    wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2, subscribe=1, author_friend=1, comments=1,
-                         comment_vote=1, comment_friend=1, post_vote=1, )
+    log.info("start found comment...")
+    # post_fullname, text = rbot.find_comment(subreddit)
+    post_fullname, text = "t3_400kke", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)"#rbot.find_comment(subreddit)
+    log.info("fullname: %s\ntext: %s"%(post_fullname, text))
+    wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2, subscribe=0, author_friend=0, comments=0,
+                         comment_vote=0, comment_friend=0, post_vote=0, )

@@ -395,11 +395,11 @@ def bot_auth_start():
         user = request.form.get("user")
         pwd = request.form.get("pwd")
 
-        db.prepare_access_credentials(C_ID, C_SECRET, user, pwd)
+        db.prepare_access_credentials(C_ID, C_SECRET, REDIRECT_URI, user, pwd)
 
         r = praw.Reddit("Hui")
         r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
-        url = r.get_authorize_url("KEY", 'identity,edit,submit,subscribe,vote', refreshable=True)
+        url = r.get_authorize_url("KEY", 'creddits,modcontributors,modconfig,subscribe,wikiread,wikiedit,vote,mysubreddits,submit,modlog,modposts,modflair,save,modothers,read,privatemessages,report,identity,livemanage,account,modtraffic,edit,modwiki,modself,history,flair', refreshable=True)
         return render_template("bot_add_credentials.html", **{"url": url, "r_u": REDIRECT_URI})
 
 
@@ -413,9 +413,9 @@ def bot_auth_end():
     r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
     info = r.get_access_information(code)
     user = r.get_me()
-    info['scope'] = list(info['scope'])
+    r.set_access_credentials(**info)
     db.update_access_credentials_info(user.name, info)
-    return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info})
+    return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info, "code":code})
 
 
 @app.route("/wake_up/<salt>", methods=["POST"])
@@ -423,17 +423,17 @@ def wake_up(salt):
     return jsonify(**{"result": salt})
 
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
-
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
-
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)
