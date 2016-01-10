@@ -1,8 +1,8 @@
-import urlparse
+# coding=utf-8
+import traceback
 from collections import defaultdict
 from datetime import datetime
-from lxml import html
-from multiprocessing import Lock, Queue
+from multiprocessing import Lock
 import praw
 from praw.objects import MoreComments
 import random
@@ -27,9 +27,12 @@ DEFAULT_LIMIT = 100
 
 min_copy_count = 2
 min_comment_create_time_difference = 3600 * 24 * 30 * 2
-min_comment_ups = 20
-max_comment_ups = 100000
+
+shift_copy_comments_part = 5  # общее количество комментариев / это число пропускаются
+min_donor_comment_ups = 3
+max_donor_comment_ups = 100000
 min_donor_num_comments = 50
+
 min_selection_comments = 10
 max_selection_comments = 20
 
@@ -142,15 +145,6 @@ class loginsProvider(object):
     def get_login_times(self):
         return self._times
 
-    @net_tryings
-    def check_current_login(self):
-        res = requests.get(
-                "http://cors-anywhere.herokuapp.com/www.reddit.com/user/%s/about.json" % self.current_login.get(
-                        "login"),
-                headers={"origin": "http://www.reddit.com"})
-        if res.status_code != 200:
-            log.error("Check login is err :( ,%s " % res)
-
 
 class RedditBot(object):
     def __init__(self, subreddits, user_agent=None):
@@ -165,19 +159,20 @@ class RedditBot(object):
         self.subscribed_subreddits = set()
         self.friends = set()
 
-        self.reddit = praw.Reddit(user_agent=user_agent or "Reddit search bot")
+        self.reddit = praw.Reddit(user_agent=user_agent or random.choice(USER_AGENTS))
 
     def get_hot_and_new(self, subreddit_name, sort=None):
         subreddit = self.reddit.get_subreddit(subreddit_name)
         hot = list(subreddit.get_hot(limit=DEFAULT_LIMIT))
         new = list(subreddit.get_new(limit=DEFAULT_LIMIT))
-        hot_d = dict(map(lambda x: (x.fullname, x), hot))
-        new_d = dict(map(lambda x: (x.fullname, x), new))
-        hot_d.update(new_d)
-        log.info("Will search for dest posts candidates at %s posts" % len(hot_d))
-        result = hot_d.values()
+        result_dict = dict(map(lambda x: (x.fullname, x), hot), **dict(map(lambda x: (x.fullname, x), new)))
+
+        log.info("Will search for dest posts candidates at %s posts" % len(result_dict))
+        result = result_dict.values()
         if sort:
             result.sort(cmp=sort)
+        log.info("Found hot and new: \n%s" % '\n'.join(
+                ["%s at %s" % (post.permalink, datetime.fromtimestamp(post.created)) for post in result]))
         return result
 
     @property
@@ -206,12 +201,6 @@ class RedditReadBot(RedditBot):
         super(RedditReadBot, self).__init__(subreddits, user_agent)
 
     def find_comment(self, at_subreddit=None):
-        get_comment_authors = lambda post_comments: set(
-                map(lambda comment: comment.author.name if not isinstance(comment,
-                                                                          MoreComments) and comment.author else "",
-                    post_comments)
-        )  # function for retrieving authors from post comments
-
         def cmp_by_created_utc(x, y):
             result = x.created_utc - y.created_utc
             if result > 0.5:
@@ -221,15 +210,8 @@ class RedditReadBot(RedditBot):
             else:
                 return 0
 
-        used_subreddits = set()
-
         while 1:
             subreddit = at_subreddit or random.choice(self.subreddits)
-            if subreddit in used_subreddits:
-                continue
-            else:
-                used_subreddits.add(subreddit)
-
             self.current_subreddit = subreddit
             all_posts = self.get_hot_and_new(subreddit, sort=cmp_by_created_utc)
             for post in all_posts:
@@ -239,55 +221,53 @@ class RedditReadBot(RedditBot):
                 copies = filter(lambda copy: _so_long(copy.created_utc, min_comment_create_time_difference) and \
                                              copy.num_comments > min_donor_num_comments,
                                 copies)
-                if len(copies) > min_copy_count:
-                    post_comments = set(self._get_all_post_comments(post))
-                    post_comments_authors = get_comment_authors(post_comments)
+                if len(copies) >= min_copy_count:
                     copies.sort(cmp=cmp_by_created_utc)
                     for copy in copies:
-                        if copy.fullname != post.fullname and copy.subreddit != post.subreddit:
-                            comment = self._retrieve_interested_comment(copy, post_comments_authors)
-                            if comment and comment not in set(map(
-                                    lambda x: x.body if not isinstance(x, MoreComments) else "",
-                                    post_comments
-                            )):
+                        if copy.subreddit != post.subreddit and copy.fullname != post.fullname:
+                            comment = self._retrieve_interested_comment(copy)
+                            if comment and post.author != comment.author:
                                 log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (
                                     comment, post.fullname, subreddit))
-                                return post.fullname, comment
+                                return post.fullname, comment.body
                 else:
                     self.low_copies_posts.add(post.url)
 
     def _get_post_copies(self, post):
-        copies = list(self.reddit.search("url:'/%s'/" % post.url))
-        log.debug("found %s copies by url: %s" % (len(copies), post.url))
+        search_request = "url:\'%s\'" % post.url
+        copies = list(self.reddit.search(search_request))
+        log.debug("found %s copies by url: %s [%s] [%s]" % (len(copies), post.url, post.fullname, post.permalink))
         return list(copies)
 
-    def _retrieve_interested_comment(self, copy, post_comment_authors):
-        # prepare comments from donor to selection
-        comments = []
-        for i, comment in enumerate(copy.comments):
+    def _retrieve_comments(self, comments, parent_id, acc=None):
+        if acc is None:
+            acc = []
+        for comment in comments:
             if isinstance(comment, MoreComments):
                 try:
-                    comments.extend(comment.comments())
+                    self._retrieve_comments(comment.comments(), parent_id, acc)
                 except Exception as e:
-                    log.exception(e)
-                    log.warning("Fuck. Some error. More comment were not unwind. ")
-            if i < random.randint(min_selection_comments, max_selection_comments):
-                continue
-            comments.append(comment)
+                    log.debug("Exception in unwind more comments: %s" % e)
+                    continue
+            else:
+                if comment.author and comment.parent_id == parent_id:
+                    acc.append(comment)
+        return acc
 
-        for comment in comments:
-            author = comment.author
-            if author and comment.ups >= min_comment_ups and comment.ups <= max_comment_ups and check_comment_text(
-                    comment.body):
-                return comment.body
+    def _retrieve_interested_comment(self, copy):
+        # prepare comments from donor to selection
+        comments = self._retrieve_comments(copy.comments, copy.fullname)
+        after = len(comments) / shift_copy_comments_part
+        for i in range(after, len(comments)):
+            comment = comments[i]
+            if comment.ups >= min_donor_comment_ups and \
+                            comment.ups <= max_donor_comment_ups and \
+                    check_comment_text(comment.body):
+                return comment
 
     def _get_all_post_comments(self, post, filter_func=lambda x: x):
-        result = []
-        for comment in post.comments:
-            if isinstance(comment, MoreComments):
-                result.extend(filter(filter_func, comment.comments()))
-            else:
-                result.append(filter_func(comment))
+        result = self._retrieve_comments(post.comments, post.fullname)
+        result = set(map(lambda x: x.body, result))
         return result
 
 
@@ -314,12 +294,26 @@ class RedditWriteBot(RedditBot):
         self.init_engine(login_credentials)
         log.info("Write bot inited with params \n %s" % (login_credentials))
 
+    @net_tryings
+    def check_login(self):
+        res = requests.get(
+                "http://cors-anywhere.herokuapp.com/www.reddit.com/user/%s/about.json" % self.user_name,
+                headers={"origin": "http://www.reddit.com"})
+        if res.status_code != 200:
+            log.error("Check login is err :( ,%s " % res)
+            return False
+        return True
+
     def init_engine(self, login_credentials):
-        user_agent = login_credentials.get("user_agent", random.choice(USER_AGENTS))
-        r = praw.Reddit(user_agent)
-        r.set_oauth_app_info(login_credentials['client_id'], login_credentials['client_secret'], login_credentials['redirect_uri'])
+        self.user_agent = login_credentials.get("user_agent", random.choice(USER_AGENTS))
+        self.user_name = login_credentials["user"]
+
+        r = praw.Reddit(self.user_agent)
+        r.set_oauth_app_info(login_credentials['client_id'], login_credentials['client_secret'],
+                             login_credentials['redirect_uri'])
         r.set_access_credentials(**login_credentials.get("info"))
-        r.login(login_credentials["user"],login_credentials["pwd"])
+        r.login(login_credentials["user"], login_credentials["pwd"])
+
         self.reddit = r
 
     def init_work_cycle(self):
@@ -356,58 +350,66 @@ class RedditWriteBot(RedditBot):
 
         return current_perc <= granted_perc
 
-    def process_work_cycle(self, subreddit_name, url_for_video):
-        pass
+    def _is_want_to(self, coefficient):
+        return coefficient >= 0 and random.randint(0, 10) > coefficient
 
-    def do_see_post(self, post, subscribe=9, author_friend=9, comments=7, comment_vote=8,
-                    comment_friend=7, post_vote=6, max_wait_time=30):
+    def do_see_post(self, post,
+                    subscribe=9,
+                    author_friend=9,
+                    comments=7,
+                    comment_mwt=5,
+                    comment_vote=8,
+                    comment_friend=7,
+                    comment_url=8,
+                    post_vote=6,
+                    max_wait_time=30):
         """
         1) go to his url with yours useragent, wait random
         2) random check comments and random check more comments
         3) random go to link in comments
+        #todo refactor action want to normal function
         :param post:
         :return:
         """
         try:
-            res = requests.get(post.url, headers={"User-Agent": self._login.get("User-Agent")})
+            res = requests.get(post.url, headers={"User-Agent": self.user_agent})
             log.info("SEE POST result: %s" % res)
         except Exception as e:
-            log.warning("Can not see post %s url %s \n:(" % (post.fullname, post.url))
+            log.warning("Can not see post %s url %s \n EXCEPT [%s] \n %s" % (
+                post.fullname, post.url, e, traceback.format_exc()))
         wt = random.randint(1, max_wait_time)
         log.info("wait time: %s" % wt)
         time.sleep(wt)
-        if post_vote and random.randint(0, 10) > post_vote and self.can_do("vote"):
+        if self._is_want_to(post_vote) and self.can_do("vote"):
             vote_count = random.choice([1, -1])
             post.vote(vote_count)
 
-        if comments and random.randint(0, 10) > comments and wt > 5:  # go to post comments
+        if self._is_want_to(comments) and wt > 5:  # go to post comments
             for comment in post.comments:
-                if comment_vote and random.randint(0, 10) >= comment_vote and self.can_do("vote"):  # voting comment
+                if self._is_want_to(comment_vote) and self.can_do("vote"):  # voting comment
                     vote_count = random.choice([1, -1])
                     comment.vote(vote_count)
                     self.c_vote_comment += 1
-                    if comment_friend and random.randint(0,
-                                                         10) >= comment_friend and vote_count > 0:  # friend comment author
+                    if self._is_want_to(comment_friend) and vote_count > 0:  # friend comment author
                         c_author = comment.author
                         if c_author.name not in self.friends:
                             c_author.friend()
                             self.friends.add(c_author.name)
 
-                if random.randint(0, 10) >= 8:  # go to url in comment
+                if self._is_want_to(comment_url):  # go to url in comment
                     urls = re_url.findall(comment.body)
                     for url in urls:
-                        res = requests.get(url, headers={"User-Agent": self._login.get("User-Agent")})
+                        res = requests.get(url, headers={"User-Agent": self.user_agent})
                         log.info("SEE Comment link result: %s", res)
                         self.r_cur += 1
 
-        if subscribe and random.randint(0, 10) >= subscribe and \
-                        post.subreddit.display_name not in self.subscribed_subreddits:  # subscribe sbrdt
+        if self._is_want_to(
+                subscribe) and post.subreddit.display_name not in self.subscribed_subreddits:  # subscribe sbrdt
             self.reddit.subscribe(post.subreddit.display_name)
             self.subscribed_subreddits.add(post.subreddit.display_name)
             self.ss += 1
 
-        if author_friend and random.randint(0,
-                                            10) >= author_friend and post.author.fullname not in self.friends:  # friend post author
+        if self._is_want_to(author_friend) and post.author.fullname not in self.friends:  # friend post author
             post.author.friend()
             self.friends.add(post.author.fullname)
             self.r_caf += 1
@@ -445,12 +447,6 @@ class RedditWriteBot(RedditBot):
         if random.randint(0, 10) > 7 and subreddit_name not in self.subscribed_subreddits:
             self.reddit.subscribe(subreddit_name)
 
-    def is_shadowbanned(self):
-        self.mutex.acquire()
-        result = self.login_provider.check_current_login()
-        self.mutex.release()
-        return result
-
 
 if __name__ == '__main__':
     db = DBHandler()
@@ -462,8 +458,8 @@ if __name__ == '__main__':
 
     subreddit = "videos"
     log.info("start found comment...")
-    # post_fullname, text = rbot.find_comment(subreddit)
-    post_fullname, text = "t3_400kke", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)"#rbot.find_comment(subreddit)
-    log.info("fullname: %s\ntext: %s"%(post_fullname, text))
+    post_fullname, text = rbot.find_comment(subreddit)
+    # post_fullname, text = "t3_400kke", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)"#rbot.find_comment(subreddit)
+    log.info("fullname: %s\ntext: %s" % (post_fullname, text))
     wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2, subscribe=0, author_friend=0, comments=0,
-                         comment_vote=0, comment_friend=0, post_vote=0, )
+                         comment_vote=0, comment_friend=0, post_vote=0, comment_mwt=0, comment_url=0)
