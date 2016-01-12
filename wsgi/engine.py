@@ -98,9 +98,9 @@ def get_reposts_count(video_id):
 
 
 @net_tryings
-def reddit_search(query):
+def reddit_search(query, count = COUNT):
     result = []
-    for post in reddit.search(query, limit=COUNT, count=COUNT):
+    for post in reddit.search(query, limit=count, count=count):
         post_info = to_save(to_show(post))
         post_info.pop("reposts_count")
         result.append(post_info)

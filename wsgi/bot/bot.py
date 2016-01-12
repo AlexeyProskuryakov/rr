@@ -365,6 +365,7 @@ class RedditWriteBot(RedditBot):
                     for url in urls:
                         res = requests.get(url, headers={"User-Agent": self.user_agent})
                         log.info("SEE Comment link result: %s", res)
+                    self.incr_cnt(A_CONSUME)
 
         if self._is_want_to(
                 subscribe) and post.subreddit.display_name not in self.subscribed_subreddits:  # subscribe sbrdt
