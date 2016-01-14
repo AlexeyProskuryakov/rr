@@ -32,7 +32,7 @@ def retrieve_video_id(url):
                 return res
 
 
-COUNT = 10000
+MAX_COUNT = 10000
 
 
 def to_show(el):
@@ -83,7 +83,7 @@ def net_tryings(fn):
 def reddit_get_new(subreddit_name):
     result = []
     sbrdt = reddit.get_subreddit(subreddit_name)
-    for el in sbrdt.get_new(limit=COUNT, count=COUNT):
+    for el in sbrdt.get_new(limit=MAX_COUNT, count=MAX_COUNT):
         data = to_show(el)
         result.append(data)
     return result
@@ -98,11 +98,10 @@ def get_reposts_count(video_id):
 
 
 @net_tryings
-def reddit_search(query, count = COUNT):
+def reddit_search(query, count = MAX_COUNT):
     result = []
     for post in reddit.search(query, limit=count, count=count):
         post_info = to_save(to_show(post))
-        post_info.pop("reposts_count")
         result.append(post_info)
     return result
 
