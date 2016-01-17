@@ -167,7 +167,7 @@ class RedditBot(object):
 
 
 class RedditReadBot(RedditBot):
-    def __init__(self, subreddits, user_agent=None):
+    def __init__(self, subreddits=[], user_agent=None):
         super(RedditReadBot, self).__init__(subreddits, user_agent)
 
     def find_comment(self, at_subreddit=None):
@@ -247,7 +247,7 @@ def check_any_login(login):
     res = requests.get(
             "http://www.reddit.com/user/%s/about.json" % login,
             headers={"origin": "http://www.reddit.com",
-                     "User-Agent":random.choice(USER_AGENTS)})
+                     "User-Agent": random.choice(USER_AGENTS)})
 
     if res.status_code != 200:
         return False
@@ -257,7 +257,7 @@ def check_any_login(login):
 
 
 class RedditWriteBot(RedditBot):
-    def __init__(self, db, subreddits, login="Shlak2k15"):
+    def __init__(self, db, subreddits=[], login="Shlak2k15"):
         """
         :param subreddits: subbreddits which this bot will comment
         :param login_credentials:  dict object with this attributes: client_id, client_secret, redirect_url, access_token, refresh_token, login and password of user and user_agent 
@@ -456,28 +456,24 @@ class RedditWriteBot(RedditBot):
 
 
 class BotKapellmeister(Process):
-    def __init__(self, wb_name, subreddits, db, ):
+    def __init__(self, wb_name, db, ):
         super(BotKapellmeister, self).__init__()
-        self.subreddits = subreddits
-        self.r_bot = RedditReadBot(subreddits)
-        self.w_bot = RedditWriteBot(db, subreddits, wb_name)
         self.db = db
-
-    def change_subreddits(self, new_subreddits):
-        self.subreddits = new_subreddits
+        self.bot_name = wb_name
+        self.r_bot = RedditReadBot()
+        self.w_bot = RedditWriteBot(db, login=self.bot_name)
 
     def bot_check(self):
-        ok = check_any_login(self.w_bot.user_name)
+        ok = check_any_login(self.bot_name)
         if not ok:
-            self.db.set_bot_banned(self.w_bot.user_name)
+            self.db.set_bot_banned(self.bot_name)
         return ok
 
     def run(self):
         while 1:
             if not self.bot_check():
                 break
-
-            for subreddit in self.subreddits:
+            for subreddit in self.db.get_bot_subs(self.bot_name):
                 post_fullname, comment_text = self.r_bot.find_comment(subreddit)
                 self.w_bot.do_comment_post(post_fullname, subreddit, comment_text, max_post_near=100)
 

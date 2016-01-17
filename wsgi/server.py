@@ -429,7 +429,7 @@ worked_bots = {}
 
 
 def start_bot(name, subs):
-    bc = BotKapellmeister(name, subs, db)
+    bc = BotKapellmeister(name,  db)
     bc.daemon = True
     bc.start()
     worked_bots[name] = bc
@@ -446,10 +446,10 @@ def bots_new():
         bot_name = bot_name.strip()
         log.info("Add subreddits: \n%s\n and bot with name: %s" % ('\n'.join([el for el in subreddits]), bot_name))
 
+        db.set_bot_subs(bot_name,subreddits)
         if bot_name not in worked_bots:
             start_bot(bot_name, subreddits)
-        else:
-            worked_bots[bot_name].change_subreddits(subreddits)
+
         return redirect(url_for('bots_info', name=bot_name))
 
     return render_template("bots_management.html", **{"bots": db.get_bots_info(), "worked_bots": worked_bots.keys()})
