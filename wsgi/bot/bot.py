@@ -397,7 +397,9 @@ class RedditWriteBot(RedditBot):
                     for url in urls:
                         res = requests.get(url, headers={"User-Agent": self.user_agent})
                         log.info("SEE Comment link result: %s", res)
-                    self.register_step(A_CONSUME, info={"urls": urls})
+                    if urls:
+                        self.register_step(A_CONSUME, info={"urls": urls})
+
             self.wait(max_wait_time / 5)
 
         if self._is_want_to(
