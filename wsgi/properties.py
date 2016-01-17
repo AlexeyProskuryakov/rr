@@ -27,6 +27,8 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 SRC_SEARCH = "search"
 SRC_OBSERV = "observation"
 

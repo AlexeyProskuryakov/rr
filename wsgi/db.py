@@ -66,76 +66,85 @@ class DBHandler(object):
                 size=1024 * 1024 * 256,
         )
 
+        self.bot_log.create_index([("bot_name", pymongo.ASCENDING)])
         self.bot_log.create_index([("time", pymongo.ASCENDING)])
         self.bot_log.create_index([("action", pymongo.ASCENDING)])
         self.bot_log.create_index([("r_id", pymongo.ASCENDING)])
 
-        self.reddit_logins = db.get_collection("reddit_logins")
-
         self.bot_config = db.get_collection("bot_config")
         self.bot_config.create_index([("user", pymongo.ASCENDING)], unique=True)
 
-    def update_access_credentials_info(self, user, info):
+    def update_bot_access_credentials_info(self, user, info):
         if isinstance(info.get("scope"), set):
             info['scope'] = list(info['scope'])
         self.bot_config.update_one({"user": user}, {"$set": {"info": info, "time": time.time()}})
 
-    def prepare_access_credentials(self, client_id, client_secret, redirect_uri, user, pwd):
+    def prepare_bot_access_credentials(self, client_id, client_secret, redirect_uri, user, pwd):
         found = self.bot_config.find_one({"user": user})
         if not found:
             self.bot_config.insert_one(
                     {"client_id": client_id,
                      "client_secret": client_secret,
-                     "redirect_uri":redirect_uri,
+                     "redirect_uri": redirect_uri,
                      "user": user,
                      "pwd": pwd
                      })
         else:
             self.bot_config.update_one({"user": user}, {"$set": {"client_id": client_id,
                                                                  "client_secret": client_secret,
-                                                                 "redirect_uri":redirect_uri,
+                                                                 "redirect_uri": redirect_uri,
                                                                  "pwd": pwd}})
 
-    def get_access_credentials(self, user):
+    def get_bot_access_credentials(self, user):
         result = self.bot_config.find_one({"user": user})
         if result.get("info").get("scope"):
             result['info']['scope'] = set(result['info']['scope'])
         return result
 
-    def get_bots_users(self):
+    def set_bot_channel_id(self, name, channel_id):
+        self.bot_config.update_one({"user": name}, {"$set": {"channel_id": channel_id}})
+
+    def is_bot_banned(self, name):
+        found = self.bot_config.find_one({"user": name})
+        if found:
+            return found.get("banned", False)
+        return False
+
+    def set_bot_banned(self, name):
+        self.bot_config.update_one({"user": name}, {"$set": {"banned": "true"}})
+
+    def get_bots_info(self):
+        found = self.bot_config.find({})
         result = []
-        for el in self.bot_config.find({}):
-            result.append(el.get("user"))
+        for el in found:
+            result.append({"name": el.get("user"), "banned": el.get("banned", False)})
         return result
 
-    def get_access_credentials_for_update(self):
-        result = []
-        for el in self.bot_config.find({"time": {"$lte": time.time() - 3500}}).sort("time", pymongo.DESCENDING):
-            result.append(el)
-        return result
+    def set_bot_subs(self, name, subreddits):
+        self.bot_config.update_one({"user": name}, {"$set": {"subs": subreddits}})
 
-    def get_access_credentials_addled(self):
-        result = []
-        for el in self.bot_config.find({"time": {"$lt": time.time() - 3600}}):
-            result.append(el)
-        return result
+    def get_bot_subs(self, name):
+        found = self.bot_config.find_one({"user":name})
+        if found:
+            return found.get("subs", None)
+        return None
 
-    def set_channel_id_to_bot(self, name, channel_id):
-        self.bot_config.update_one({"name": name}, {"$set": {"channel_id": channel_id}})
+    def save_log_bot_row(self, bot_name, action_name, info):
+        self.bot_log.insert_one(
+                {"bot_name": bot_name,
+                 "action": action_name,
+                 "time": datetime.utcnow(),
+                 "info": info})
 
-    def save_reddit_login(self, login_name, password):
-        self.reddit_logins.insert_one({"login_name": login_name, "password": password})
+    def get_log_of_bot(self, bot_name):
+        return list(self.bot_log.find({"bot_name":bot_name}).sort("time", pymongo.DESCENDING))
 
-    def update_reddit_login(self, login_name, update):
-        if update:
-            self.reddit_logins.update_one({"login_name": login_name}, {"$set": update})
-
-    def get_reddit_login(self, login_name):
-        return self.reddit_logins.find_one({"login_name": login_name})
-
-    def get_reddit_logins(self, q=None):
-        query = q or {}
-        return self.reddit_logins.find(query)
+    def get_log_of_bot_statistics(self, bot_name):
+        pipeline = [
+            {"$match": {"bot_name": bot_name }},
+            {"$group": {"_id": "$action", "count": {"$sum": 1}}},
+        ]
+        return list(self.bot_log.aggregate(pipeline))
 
     def add_search_params(self, sbrdt_name, params, statistic):
         ps = self.get_search_params(sbrdt_name)

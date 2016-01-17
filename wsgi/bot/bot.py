@@ -3,6 +3,8 @@ import traceback
 from collections import defaultdict
 from datetime import datetime
 from multiprocessing import Lock
+from multiprocessing.process import Process
+
 import praw
 from praw.objects import MoreComments
 import random
@@ -10,6 +12,7 @@ import re
 import requests
 import requests.auth
 import time
+import json
 
 from wsgi import properties
 from wsgi.db import DBHandler
@@ -23,6 +26,9 @@ A_POST = "post"
 A_VOTE = "vote"
 A_COMMENT = "comment"
 A_CONSUME = "consume"
+
+A_SUBSCRIBE = "subscribe"
+A_FRIEND = "friend"
 
 DEFAULT_LIMIT = 100
 
@@ -142,8 +148,8 @@ class RedditBot(object):
         result = result_dict.values()
         if sort:
             result.sort(cmp=sort)
-        log.info("Found hot and new: \n%s" % '\n'.join(
-                ["%s at %s" % (post.permalink, datetime.fromtimestamp(post.created)) for post in result]))
+        # log.info("Found hot and new: \n%s" % '\n'.join(
+        #         ["%s at %s" % (post.permalink, datetime.fromtimestamp(post.created)) for post in result]))
         return result
 
     @property
@@ -193,6 +199,7 @@ class RedditReadBot(RedditBot):
                             if comment and post.author != comment.author:
                                 log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (
                                     comment, post.fullname, subreddit))
+                                self.last_actions.set_action(A_COMMENT, post.fullname)
                                 return post.fullname, comment.body
                 else:
                     self.low_copies_posts.add(post.url)
@@ -200,7 +207,7 @@ class RedditReadBot(RedditBot):
     def _get_post_copies(self, post):
         search_request = "url:\'%s\'" % post.url
         copies = list(self.reddit.search(search_request))
-        log.debug("found %s copies by url: %s [%s] [%s]" % (len(copies), post.url, post.fullname, post.permalink))
+        # log.debug("found %s copies by url: %s [%s] [%s]" % (len(copies), post.url, post.fullname, post.permalink))
         return list(copies)
 
     def _retrieve_comments(self, comments, parent_id, acc=None):
@@ -235,8 +242,22 @@ class RedditReadBot(RedditBot):
         return result
 
 
+@net_tryings
+def check_any_login(login):
+    res = requests.get(
+            "http://www.reddit.com/user/%s/about.json" % login,
+            headers={"origin": "http://www.reddit.com",
+                     "User-Agent":random.choice(USER_AGENTS)})
+
+    if res.status_code != 200:
+        return False
+    if res.json().get("error", None):
+        return False
+    return True
+
+
 class RedditWriteBot(RedditBot):
-    def __init__(self, subreddits, login_credentials):
+    def __init__(self, db, subreddits, login="Shlak2k15"):
         """
         :param subreddits: subbreddits which this bot will comment
         :param login_credentials:  dict object with this attributes: client_id, client_secret, redirect_url, access_token, refresh_token, login and password of user and user_agent 
@@ -244,7 +265,8 @@ class RedditWriteBot(RedditBot):
         :return:
         """
         super(RedditWriteBot, self).__init__(subreddits)
-
+        self.db = db
+        login_credentials = db.get_bot_access_credentials(login)
         self.init_engine(login_credentials)
         self.init_work_cycle()
         log.info("Write bot inited with params \n %s" % (login_credentials))
@@ -252,10 +274,10 @@ class RedditWriteBot(RedditBot):
     @net_tryings
     def check_login(self):
         res = requests.get(
-                "http://cors-anywhere.herokuapp.com/www.reddit.com/user/%s/about.json" % self.user_name,
+                "http://www.reddit.com/api/username_available.json?user=%s" % self.user_name,
                 headers={"origin": "http://www.reddit.com"})
         if res.status_code != 200:
-            log.error("Check login is err :( ,%s " % res)
+            log.error("Check login [%s] is err :( ,%s " % (self.user_name, res))
             return False
         return True
 
@@ -275,6 +297,7 @@ class RedditWriteBot(RedditBot):
 
     def refresh_token(self):
         self.access_information = self.reddit.refresh_access_information(self.access_information['refresh_token'])
+        self.db.update_bot_access_credentials_info(self.user_name, self.access_information)
 
     def incr_cnt(self, name):
         self.counters[name] += 1
@@ -314,6 +337,12 @@ class RedditWriteBot(RedditBot):
     def _is_want_to(self, coefficient):
         return coefficient >= 0 and random.randint(0, 10) > coefficient
 
+    def register_step(self, step_type, info=None):
+        if step_type in self.counters:
+            self.incr_cnt(step_type)
+
+        self.db.save_log_bot_row(self.user_name, step_type, info or {})
+
     def do_see_post(self, post,
                     subscribe=9,
                     author_friend=9,
@@ -335,46 +364,60 @@ class RedditWriteBot(RedditBot):
         try:
             res = requests.get(post.url, headers={"User-Agent": self.user_agent})
             log.info("SEE POST result: %s" % res)
-            self.incr_cnt(A_CONSUME)
+            self.register_step(A_CONSUME, info={"url": post.url})
         except Exception as e:
             log.warning("Can not see post %s url %s \n EXCEPT [%s] \n %s" % (
                 post.fullname, post.url, e, traceback.format_exc()))
 
-        wt = random.randint(1, max_wait_time)
-        log.info("wait time: %s" % wt)
-        time.sleep(wt)
+        wt = self.wait(max_wait_time)
+
         if self._is_want_to(post_vote) and self.can_do("vote"):
             vote_count = random.choice([1, -1])
             post.vote(vote_count)
-            self.incr_cnt(A_VOTE)
+            self.register_step(A_VOTE, info={"post": post.fullname, "vote": vote_count})
+            self.wait(max_wait_time / 2)
 
         if self._is_want_to(comments) and wt > 5:  # go to post comments
             for comment in post.comments:
                 if self._is_want_to(comment_vote) and self.can_do("vote"):  # voting comment
                     vote_count = random.choice([1, -1])
                     comment.vote(vote_count)
-                    self.incr_cnt(A_VOTE)
+                    self.register_step(A_VOTE, info={"post": comment.fullname, "vote": vote_count})
+                    self.wait(max_wait_time / 10)
                     if self._is_want_to(comment_friend) and vote_count > 0:  # friend comment author
                         c_author = comment.author
                         if c_author.name not in self.friends:
                             c_author.friend()
                             self.friends.add(c_author.name)
+                            self.register_step(A_FRIEND, info={"friend": c_author.name})
+                            self.wait(max_wait_time / 10)
 
                 if self._is_want_to(comment_url):  # go to url in comment
                     urls = re_url.findall(comment.body)
                     for url in urls:
                         res = requests.get(url, headers={"User-Agent": self.user_agent})
                         log.info("SEE Comment link result: %s", res)
-                    self.incr_cnt(A_CONSUME)
+                    self.register_step(A_CONSUME, info={"urls": urls})
+            self.wait(max_wait_time / 5)
 
         if self._is_want_to(
                 subscribe) and post.subreddit.display_name not in self.subscribed_subreddits:  # subscribe sbrdt
             self.reddit.subscribe(post.subreddit.display_name)
             self.subscribed_subreddits.add(post.subreddit.display_name)
+            self.register_step(A_SUBSCRIBE, info={"sub": post.subreddit.display_name})
+            self.wait(max_wait_time / 5)
 
         if self._is_want_to(author_friend) and post.author.fullname not in self.friends:  # friend post author
             post.author.friend()
-            self.friends.add(post.author.fullname)
+            self.friends.add(post.author.name)
+            self.register_step(A_FRIEND, info={"friend": post.author.name})
+            self.wait(max_wait_time / 5)
+
+    def wait(self, max_wait_time):
+        wt = random.randint(1, max_wait_time)
+        log.info("wait time: %s" % wt)
+        time.sleep(wt)
+        return wt
 
     def _get_random_near(self, slice, index, max):
         rnd = lambda x: random.randint(x / 10, x / 2) or 1
@@ -407,29 +450,71 @@ class RedditWriteBot(RedditBot):
 
         if self._is_want_to(subscribe_subreddit) and subreddit_name not in self.subscribed_subreddits:
             self.reddit.subscribe(subreddit_name)
+            self.register_step(A_SUBSCRIBE, info={"sub": subreddit_name})
 
-        self.incr_cnt(A_COMMENT)
+        self.register_step(A_COMMENT, info={"post": post_fullname, "text": comment_text, "sub": subreddit_name})
+
+
+class BotKapellmeister(Process):
+    def __init__(self, wb_name, subreddits, db, ):
+        super(BotKapellmeister, self).__init__()
+        self.subreddits = subreddits
+        self.r_bot = RedditReadBot(subreddits)
+        self.w_bot = RedditWriteBot(db, subreddits, wb_name)
+        self.db = db
+
+    def change_subreddits(self, new_subreddits):
+        self.subreddits = new_subreddits
+
+    def bot_check(self):
+        ok = check_any_login(self.w_bot.user_name)
+        if not ok:
+            self.db.set_bot_banned(self.w_bot.user_name)
+        return ok
+
+    def run(self):
+        while 1:
+            if not self.bot_check():
+                break
+
+            for subreddit in self.subreddits:
+                post_fullname, comment_text = self.r_bot.find_comment(subreddit)
+                self.w_bot.do_comment_post(post_fullname, subreddit, comment_text, max_post_near=100)
+
+            self.w_bot.wait(3600)
 
 
 if __name__ == '__main__':
     db = DBHandler()
-    # sbrdt = "videos"
-    # rbot = RedditReadBot(["videos"])
-    # """client_id: O5AZrYjXI1R-7g
-    # """client_secret: LOsmYChS2dcdQIlkMG9peFR6Lns
-    wbot = RedditWriteBot(["videos"], db.get_access_credentials("Shlak2k15"))
-    db.update_access_credentials_info("Shlak2k15", wbot.access_information)
+    # # sbrdt = "videos"
+    # # rbot = RedditReadBot(["videos"])
+    # # """client_id: O5AZrYjXI1R-7g
+    # # """client_secret: LOsmYChS2dcdQIlkMG9peFR6Lns
+    # wbot = RedditWriteBot(db, ["videos"], "Shlak2k15")
+    #
+    # # subreddit = "videos"
+    # # log.info("start found comment...")
+    # # post_fullname, text = rbot.find_comment(subreddit)
+    # # # post_fullname, text = "t3_400kke", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)"#rbot.find_comment(subreddit)
+    # # log.info("fullname: %s\ntext: %s" % (post_fullname, text))
+    # # wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2, subscribe=0, author_friend=0, comments=0,
+    # #                      comment_vote=0, comment_friend=0, post_vote=0, comment_mwt=0, comment_url=0)
+    #
+    # for i in range(100):
+    #     print "Can comment? %s Can vote? %s Can consume? %s" % (
+    #         wbot.can_do(A_COMMENT), wbot.can_do(A_VOTE), wbot.can_do(A_CONSUME))
+    #
+    #     wbot.incr_cnt(A_CONSUME)
+    #
+    # print wbot.check_login()
+    name = "Shlak2k15"
 
-    # subreddit = "videos"
-    # log.info("start found comment...")
-    # post_fullname, text = rbot.find_comment(subreddit)
-    # # post_fullname, text = "t3_400kke", "[Fade Into You](http://www.youtube.com/watch?v=XucegAHZojc)"#rbot.find_comment(subreddit)
-    # log.info("fullname: %s\ntext: %s" % (post_fullname, text))
-    # wbot.do_comment_post(post_fullname, subreddit, text, max_wait_time=2, subscribe=0, author_friend=0, comments=0,
-    #                      comment_vote=0, comment_friend=0, post_vote=0, comment_mwt=0, comment_url=0)
+    # check_any_login("Shlak2k15")
+    # check_any_login("4ikist")
 
-    for i in range(100):
-        print "Can comment? %s Can vote? %s Can consume? %s" % (
-            wbot.can_do(A_COMMENT), wbot.can_do(A_VOTE), wbot.can_do(A_CONSUME))
-
-        wbot.incr_cnt(A_CONSUME)
+    log = db.get_log_of_bot(name)
+    print log
+    stat = db.get_log_of_bot_statistics(name)
+    print stat
+    banned = db.is_bot_banned(name)
+    print banned

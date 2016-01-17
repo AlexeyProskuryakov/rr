@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block body %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <div class="row">
+        <div class="col-md-3">
+            {% if not worked %}
+            <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
+                <input type="submit" value="Start bot">
+            </form>
+            {% endif %}
+        </div>
+        <div class="col-md-6">
+            <h1>Information of {{bot_name}}
+                <small>(banned? {{banned}} worked? {{worked}})</small>
+            </h1>
+            <h3> Statistics of bot actions:</h3>
+            <table class="table table-stripped">
+                {% for row in bot_stat %}
+                <tr>
+                    <th>
+                        {{row.get("_id")}}
+                    </th>
+                    <th>
+                        {{row.get("count")}}
+                    </th>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+
+    </div>
+
+
+    <div class="row">
+        <div class="col-md-6 col-md-offset-3">
+            <h3>Bot log:</h3>
+        </div>
+        <table class="table table-striped">
+            <tbody>
+            {%for row in bot_log%}
+            <tr>
+                <th class="col-md-2">
+                    {{row.get("action")}}
+                </th>
+                <th class="col-md-8">
+                    {{row.get("info")}}
+                </th>
+                <th class="col-md-2">
+                    {{row.get("time")}}
+                </th>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+    </div>
+</div>
+{% endblock %}
+
+{% endblock %}

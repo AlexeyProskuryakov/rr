@@ -4,9 +4,10 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from multiprocessing import Queue
 import os
+import logging
 
 import praw
-from flask import Flask, render_template, request, url_for, logging, session, g
+from flask import Flask, render_template, request, url_for, session, g
 from flask.json import jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user
 from flask_debugtoolbar import DebugToolbarExtension
@@ -15,13 +16,16 @@ from db import DBHandler
 from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 import properties
+from wsgi.bot.bot import BotKapellmeister
 from wsgi.engine import reddit_search, Retriever
 from wsgi.properties import SRC_SEARCH, SRC_OBSERV
 from wsgi.wake_up import WakeUp
 
 __author__ = '4ikist'
 
-log = logging.getLogger("web")
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+log = properties.logger.getChild("web")
+
 cur_dir = os.path.dirname(__file__)
 app = Flask("rr", template_folder=cur_dir + "/templates", static_folder=cur_dir + "/static")
 
@@ -378,7 +382,7 @@ def search_load():
     return jsonify(**{"ok": True, "name": name})
 
 
-REDIRECT_URI = "http://127.0.0.1:65010/authorize_callback"
+REDIRECT_URI = "http://rr-alexeyp.rhcloud.com/authorize_callback"
 C_ID = None
 C_SECRET = None
 
@@ -396,11 +400,13 @@ def bot_auth_start():
         user = request.form.get("user")
         pwd = request.form.get("pwd")
 
-        db.prepare_access_credentials(C_ID, C_SECRET, REDIRECT_URI, user, pwd)
+        db.prepare_bot_access_credentials(C_ID, C_SECRET, REDIRECT_URI, user, pwd)
 
         r = praw.Reddit("Hui")
         r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
-        url = r.get_authorize_url("KEY", 'creddits,modcontributors,modconfig,subscribe,wikiread,wikiedit,vote,mysubreddits,submit,modlog,modposts,modflair,save,modothers,read,privatemessages,report,identity,livemanage,account,modtraffic,edit,modwiki,modself,history,flair', refreshable=True)
+        url = r.get_authorize_url("KEY",
+                                  'creddits,modcontributors,modconfig,subscribe,wikiread,wikiedit,vote,mysubreddits,submit,modlog,modposts,modflair,save,modothers,read,privatemessages,report,identity,livemanage,account,modtraffic,edit,modwiki,modself,history,flair',
+                                  refreshable=True)
         return render_template("bot_add_credentials.html", **{"url": url, "r_u": REDIRECT_URI})
 
 
@@ -415,8 +421,52 @@ def bot_auth_end():
     info = r.get_access_information(code)
     user = r.get_me()
     r.set_access_credentials(**info)
-    db.update_access_credentials_info(user.name, info)
-    return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info, "code":code})
+    db.update_bot_access_credentials_info(user.name, info)
+    return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info, "code": code})
+
+
+worked_bots = {}
+
+
+def start_bot(name, subs):
+    bc = BotKapellmeister(name, subs, db)
+    bc.daemon = True
+    bc.start()
+    worked_bots[name] = bc
+
+
+@login_required
+@app.route("/bots/new", methods=["POST", "GET"])
+def bots_new():
+    if request.method == "POST":
+        subreddits_raw = request.form.get("sbrdts")
+        subreddits = subreddits_raw.strip().split()
+
+        bot_name = request.form.get("bot-name")
+        bot_name = bot_name.strip()
+        log.info("Add subreddits: \n%s\n and bot with name: %s" % ('\n'.join([el for el in subreddits]), bot_name))
+
+        if bot_name not in worked_bots:
+            start_bot(bot_name, subreddits)
+        else:
+            worked_bots[bot_name].change_subreddits(subreddits)
+        return redirect(url_for('bots_info', name=bot_name))
+
+    return render_template("bots_management.html", **{"bots": db.get_bots_info(), "worked_bots": worked_bots.keys()})
+
+
+@login_required
+@app.route("/bots/<name>", methods=["POST", "GET"])
+def bots_info(name):
+    if request.method == "POST":
+        subs = db.get_bot_subs(name)
+        start_bot(name, subs)
+
+    log = db.get_log_of_bot(name)
+    stat = db.get_log_of_bot_statistics(name)
+    banned = db.is_bot_banned(name)
+    return render_template("bot_info.html", **{"bot_name": name, "bot_stat": stat, "bot_log": log, "banned": banned,
+                                               "worked": name in worked_bots})
 
 
 @app.route("/wake_up/<salt>", methods=["POST"])
@@ -424,23 +474,24 @@ def wake_up(salt):
     return jsonify(**{"result": salt})
 
 
-# spw = SubredditProcessWorker(tq, rq, db)
-# spw.daemon = True
-# spw.start()
-#
-# su = SubredditUpdater(tq, db)
-# su.daemon = True
-# su.start()
-#
-# pu = PostUpdater(db)
-# pu.daemon = True
-# pu.start()
+spw = SubredditProcessWorker(tq, rq, db)
+spw.daemon = True
+spw.start()
+
+su = SubredditUpdater(tq, db)
+su.daemon = True
+su.start()
+
+pu = PostUpdater(db)
+pu.daemon = True
+pu.start()
 
 
 url = "http://read-shlak0bl0k.rhcloud.com"
 wu = WakeUp(url)
 wu.daemon = True
 wu.start()
+
 
 @app.route("/wake_up")
 def index():
@@ -449,6 +500,7 @@ def index():
         wu.what = _url
     else:
         return render_template("wake_up.html", **{"url": wu.what})
+
 
 if __name__ == '__main__':
     print os.path.dirname(__file__)
