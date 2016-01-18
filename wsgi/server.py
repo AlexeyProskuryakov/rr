@@ -390,11 +390,13 @@ C_SECRET = None
 @login_required
 @app.route("/bot/add_credential", methods=["GET", "POST"])
 def bot_auth_start():
+    global C_ID
+    global C_SECRET
+
     if request.method == "GET":
         return render_template("bot_add_credentials.html", **{"url": False, "r_u": REDIRECT_URI})
     if request.method == "POST":
-        global C_ID
-        global C_SECRET
+
         C_ID = request.form.get("client_id")
         C_SECRET = request.form.get("client_secret")
         user = request.form.get("user")
