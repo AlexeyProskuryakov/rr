@@ -472,15 +472,21 @@ class BotKapellmeister(Process):
 
     def run(self):
         while 1:
-            if self.must_stop:
-                break
-            if not self.bot_check():
-                break
-            for subreddit in self.db.get_bot_subs(self.bot_name):
-                post_fullname, comment_text = self.r_bot.find_comment(subreddit)
-                self.db.update_bot_state(self.bot_name, self.r_bot.state)
-                self.db.set_posts_commented(self.r_bot.state.get("cp"))
+            try:
+                if self.must_stop:
+                    break
+                if not self.bot_check():
+                    break
+                for subreddit in self.db.get_bot_subs(self.bot_name):
+                    found = self.r_bot.find_comment(subreddit)
+                    if not found: continue
+                    post_fullname, comment_text = found
+                    self.db.update_bot_state(self.bot_name, self.r_bot.state)
+                    self.db.set_posts_commented(self.r_bot.state.get("cp"))
 
-                self.w_bot.do_comment_post(post_fullname, subreddit, comment_text, max_post_near=100)
+                    self.w_bot.do_comment_post(post_fullname, subreddit, comment_text, max_post_near=100)
 
-            self.w_bot.wait(3600)
+                self.w_bot.wait(3600)
+            except Exception as e:
+                time.sleep(10)
+                log.exception(e)
