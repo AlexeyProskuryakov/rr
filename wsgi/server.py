@@ -470,10 +470,10 @@ def bots_info(name):
 
         start_bot(name)
 
-    log = db.get_log_of_bot(name)
+    bot_log = db.get_log_of_bot(name)
     stat = db.get_log_of_bot_statistics(name)
     banned = db.is_bot_banned(name)
-    return render_template("bot_info.html", **{"bot_name": name, "bot_stat": stat, "bot_log": log, "banned": banned,
+    return render_template("bot_info.html", **{"bot_name": name, "bot_stat": stat, "bot_log": bot_log, "banned": banned,
                                                "worked": name in worked_bots})
 
 

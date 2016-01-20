@@ -48,7 +48,7 @@ min_consuming = 70
 min_voting = 65
 max_voting = 95
 
-check_comment_text = lambda text: not re_url.match(text) and len(text) > 15 and len(text) < 120
+check_comment_text = lambda text: not re_url.match(text) and len(text) > 15 and len(text) < 120 and "Edit" not in text
 post_info = lambda post: {"fullname": post.fullname, "url": post.url}
 
 db = DBHandler()
