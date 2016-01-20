@@ -75,7 +75,6 @@ class DBHandler(object):
         self.commented_posts = db.get_collection("commented_posts")
         self.commented_posts.create_index([("fullname", pymongo.ASCENDING)], unique=True)
 
-
     def update_bot_access_credentials_info(self, user, info):
         if isinstance(info.get("scope"), set):
             info['scope'] = list(info['scope'])
@@ -134,21 +133,22 @@ class DBHandler(object):
     def update_bot_state(self, name, state):
         self.bot_config.update_one({"user": name}, {"$set": state})
 
-
     def get_bot_state(self, name):
         found = self.bot_config.find_one({"user": name})
         if found:
-            return {"ss": set(found.get("ss", [])), #subscribed subreddits
-                    "frds": set(found.get("friends", [])), # friends
-                    "lcp": set(found.get("lcp",[])), #low copies count
-                    "cp":set(found.get("cp",[])) #commented posts
+            return {"ss": set(found.get("ss", [])),  # subscribed subreddits
+                    "frds": set(found.get("friends", [])),  # friends
+                    "lcp": set(found.get("lcp", [])),  # low copies count
+                    "cp": set(found.get("cp", []))  # commented posts
                     }
 
     def set_posts_commented(self, posts):
-        self.commented_posts.insert_many([{"fullname":x} for x in posts])
+        to_save = set([el.get("fullname") for el in self.commented_posts.find({})]).difference(set(posts))
+        if len(to_save):
+            self.commented_posts.insert_many([{"fullname": x} for x in to_save])
 
     def is_post_commented(self, post_fullname):
-        return self.commented_posts.find_one({"fullname":post_fullname}) != None
+        return self.commented_posts.find_one({"fullname": post_fullname}) != None
 
     def save_log_bot_row(self, bot_name, action_name, info):
         self.bot_log.insert_one(

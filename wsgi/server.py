@@ -429,12 +429,17 @@ def bot_auth_end():
 worked_bots = {}
 
 
-def start_bot(name, subs):
+def start_bot(name):
     bc = BotKapellmeister(name,  db)
     bc.daemon = True
     bc.start()
     worked_bots[name] = bc
 
+def stop_bot(name):
+    if name in worked_bots:
+        worked_bots[name].will_must_stop()
+        worked_bots[name].join(5)
+        del worked_bots[name]
 
 @login_required
 @app.route("/bots/new", methods=["POST", "GET"])
@@ -449,7 +454,7 @@ def bots_new():
 
         db.set_bot_subs(bot_name,subreddits)
         if bot_name not in worked_bots:
-            start_bot(bot_name, subreddits)
+            start_bot(bot_name)
 
         return redirect(url_for('bots_info', name=bot_name))
 
@@ -460,8 +465,10 @@ def bots_new():
 @app.route("/bots/<name>", methods=["POST", "GET"])
 def bots_info(name):
     if request.method == "POST":
-        subs = db.get_bot_subs(name)
-        start_bot(name, subs)
+        if request.form.get("restart"):
+            stop_bot(name)
+
+        start_bot(name)
 
     log = db.get_log_of_bot(name)
     stat = db.get_log_of_bot_statistics(name)
