@@ -14,20 +14,40 @@ def module_path():
     return os.path.dirname(__file__)
 
 
+log_file_f = lambda x:os.path.join(module_path(), (x if x else "")+'result.log')
 log_file = os.path.join(module_path(), 'result.log')
 cacert_file = os.path.join(module_path(), 'cacert.pem')
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler(log_file)
-ch = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s[%(levelname)s]%(name)s|%(processName)s(%(process)d): %(message)s')
-fh.setFormatter(formatter)
-ch.setFormatter(formatter)
-logger.addHandler(fh)
-logger.addHandler(ch)
 
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s[%(levelname)s]%(name)s|%(processName)s(%(process)d): %(message)s')
+formatter_process = logging.Formatter('%(asctime)s[%(levelname)s]%(name)s|%(processName)s: %(message)s')
+formatter_bot = logging.Formatter('%(asctime)s|%(name)s: %(message)s')
+
+sh = logging.StreamHandler()
+sh.setFormatter(formatter)
+logger.addHandler(sh)
+
+
+fh = logging.FileHandler(log_file)
+fh.setFormatter(formatter)
+logger.addHandler(fh)
+
+fh_process = logging.FileHandler(log_file_f("process_"))
+fh.setFormatter(formatter_process)
+logger.getChild("process").addHandler(fh)
+
+fh_bot = logging.FileHandler(log_file_f("bot_"))
+fh_bot.setFormatter(formatter_bot)
+logger.getChild("bot").addHandler(fh_bot)
+
+
+print "i want to setting level url lib"
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("requests").setLevel(logging.WARNING)
+print "i want..."
+
 
 SRC_SEARCH = "search"
 SRC_OBSERV = "observation"

@@ -1,18 +1,16 @@
 from datetime import datetime
 import hashlib
-import logging
+
 import time
 import pymongo
 
 from pymongo import MongoClient
 from engine import get_interested_fields
-from properties import min_time_step
-import properties
-from wsgi.properties import SRC_SEARCH
+from wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger, mongo_uri
 
 __author__ = 'alesha'
 
-log = logging.getLogger("DB")
+log = logger.getChild("DB")
 
 
 class StatisticsCache(object):
@@ -23,8 +21,8 @@ class StatisticsCache(object):
 
 class DBHandler(object):
     def __init__(self):
-        log.info("start db handler %s" % properties.mongo_uri)
-        client = MongoClient(host=properties.mongo_uri)
+        log.info("start db handler %s" % mongo_uri)
+        client = MongoClient(host=mongo_uri)
         db = client['rr']
         self.posts = db['posts']
         self.posts.create_index([("fullname", pymongo.ASCENDING)])
@@ -182,7 +180,7 @@ class DBHandler(object):
     def get_raw_posts(self, sbrdt_name):
         found = self.raw_posts.find_one({"name": sbrdt_name})
         if found:
-            if (time.time() - found.get("time")) > properties.min_update_period:
+            if (time.time() - found.get("time")) > min_update_period:
                 self.raw_posts.delete_one({"name": sbrdt_name})
                 return None
             return found.get("posts")
@@ -244,7 +242,7 @@ class DBHandler(object):
     def delete_post(self, full_name, video_id):
         self.posts.update_one({"fullname": full_name, "video_id": video_id}, {"$set": {"deleted": time.time()}})
 
-    def get_posts_for_update(self, min_update_period=properties.min_update_period):
+    def get_posts_for_update(self, min_update_period=min_update_period):
         found = self.posts.find(
                 {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}],
                  "deleted": {"$exists": False}})

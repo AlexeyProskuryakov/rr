@@ -12,7 +12,7 @@ import re
 import requests
 import requests.auth
 import time
-import json
+
 
 from wsgi import properties
 from wsgi.db import DBHandler
@@ -20,7 +20,7 @@ from wsgi.engine import net_tryings
 
 re_url = re.compile("((https?|ftp)://|www\.)[^\s/$.?#].[^\s]*")
 
-log = properties.logger.getChild("reddit-bot")
+log = properties.logger.getChild("bot")
 
 A_POST = "post"
 A_VOTE = "vote"
@@ -35,7 +35,7 @@ DEFAULT_LIMIT = 100
 min_copy_count = 2
 min_comment_create_time_difference = 3600 * 24 * 30 * 2
 
-shift_copy_comments_part = 5  # общее количество комментариев / это число пропускаются
+shift_copy_comments_part = 5  # общее количество комментариев / это число  = сколько будет пропускаться
 min_donor_comment_ups = 3
 max_donor_comment_ups = 100000
 min_donor_num_comments = 50
@@ -483,7 +483,6 @@ class BotKapellmeister(Process):
 
 
 if __name__ == '__main__':
-    db = DBHandler()
     # # sbrdt = "videos"
     # # rbot = RedditReadBot(["videos"])
     # # """client_id: O5AZrYjXI1R-7g

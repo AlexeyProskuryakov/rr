@@ -1,14 +1,13 @@
 # coding=utf-8
-import logging
 from multiprocessing import Process
 from time import sleep
 from db import DBHandler
 from engine import Retriever, reddit_get_new, get_current_step, to_save, update_posts
-from properties import min_update_period, min_time_step, max_time_step
+from wsgi.properties import min_update_period, min_time_step, max_time_step, logger
 
 __author__ = 'alesha'
 
-log = logging.getLogger("processes")
+log = logger.getChild("process")
 
 
 class SubredditProcessWorker(Process):

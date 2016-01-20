@@ -5,7 +5,6 @@ from multiprocessing import Process
 import requests
 import time
 
-from flask import logging
 
 log = logging.getLogger("wake_up")
 

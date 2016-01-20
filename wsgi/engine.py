@@ -1,14 +1,14 @@
 from functools import partial
-import logging
+
 from datetime import datetime
 import time
 import re
 import praw
-import properties
+from wsgi import properties
 from youtube import parse_time, to_seconds
 import youtube
 
-log = logging.getLogger("engine")
+log = properties.logger.getChild("engine")
 
 reddit = praw.Reddit(user_agent="foo")
 

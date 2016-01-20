@@ -15,16 +15,15 @@ from werkzeug.utils import redirect
 from db import DBHandler
 from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
-import properties
+
 from wsgi.bot.bot import BotKapellmeister
 from wsgi.engine import reddit_search, Retriever
-from wsgi.properties import SRC_SEARCH, SRC_OBSERV
+from wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min
 from wsgi.wake_up import WakeUp
 
 __author__ = '4ikist'
 
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-log = properties.logger.getChild("web")
+log = logger.getChild("web")
 
 cur_dir = os.path.dirname(__file__)
 app = Flask("rr", template_folder=cur_dir + "/templates", static_folder=cur_dir + "/static")
@@ -172,7 +171,7 @@ def add_subreddit():
     params['rate_max'] = int(request.form.get("rate_max") or 99999)
     params['reposts_max'] = int(request.form.get("reposts_max") or 10)
     params['lrtime'] = int(request.form.get("lrtime") or 1800)
-    params['time_min'] = request.form.get("time_min") or properties.default_time_min
+    params['time_min'] = request.form.get("time_min") or default_time_min
 
     log.info("Add %s with params: \n%s" % (name, "\n".join(["%s : %s" % (k, v) for k, v in params.iteritems()])))
     db.add_subreddit(name, params, params['lrtime'])
@@ -335,7 +334,7 @@ def search_load():
     params['rate_min'] = int(request.form.get("rate_min") or 0)
     params['rate_max'] = int(request.form.get("rate_max") or 99999)
     params['reposts_max'] = int(request.form.get("reposts_max") or 10)
-    params['time_min'] = request.form.get("time_min") or properties.default_time_min
+    params['time_min'] = request.form.get("time_min") or default_time_min
 
     before_raw = request.form.get("before")
     if before_raw and len(before_raw):
