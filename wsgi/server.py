@@ -475,17 +475,17 @@ def wake_up(salt):
     return jsonify(**{"result": salt})
 
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
-
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
-
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 
 url = "http://read-shlak0bl0k.rhcloud.com"

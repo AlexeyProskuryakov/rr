@@ -13,7 +13,6 @@ import requests
 import requests.auth
 import time
 
-
 from wsgi import properties
 from wsgi.db import DBHandler
 from wsgi.engine import net_tryings
@@ -88,54 +87,8 @@ def _so_long(created, min_time):
     return (datetime.utcnow() - datetime.fromtimestamp(created)).total_seconds() > min_time
 
 
-class ActionsHandler(object):
-    def __init__(self):
-        self.last_actions = {
-            A_POST: datetime.utcnow(),
-            A_VOTE: datetime.utcnow(),
-            A_COMMENT: datetime.utcnow(),
-        }
-        self.acted = defaultdict(set)
-        self.info = {}
-
-    def set_action(self, action_name, identity, info=None):
-        self.last_actions[action_name] = datetime.utcnow()
-        self.acted[action_name].add(identity)
-        if info:
-            to_save = {'action': action_name, "r_id": identity, "info": info}
-            db.bot_log.insert_one(to_save)
-            self.info[identity] = info
-
-    def get_last_action(self, action_name):
-        res = self.last_actions.get(action_name)
-        if not res:
-            raise Exception("Action %s is not supported")
-        return res
-
-    def is_acted(self, action_name, identity):
-        return identity in self.acted[action_name]
-
-    def get_actions(self, action_name=None):
-        return self.acted if action_name is None else self.acted.get(action_name)
-
-    def get_action_info(self, identity):
-        action_info = self.info.get(identity)
-        return action_info
-
-
 class RedditBot(object):
-    def __init__(self, subreddits, user_agent=None):
-        self.last_actions = ActionsHandler()
-
-        self.mutex = Lock()
-        self.subreddits = subreddits
-        self._current_subreddit = None
-
-        self.low_copies_posts = set()
-
-        self.subscribed_subreddits = set()
-        self.friends = set()
-
+    def __init__(self, user_agent=None):
         self.reddit = praw.Reddit(user_agent=user_agent or random.choice(USER_AGENTS))
 
     def get_hot_and_new(self, subreddit_name, sort=None):
@@ -152,25 +105,30 @@ class RedditBot(object):
         #         ["%s at %s" % (post.permalink, datetime.fromtimestamp(post.created)) for post in result]))
         return result
 
-    @property
-    def current_subreddit(self):
-        self.mutex.acquire()
-        result = self._current_subreddit
-        self.mutex.release()
-        return result
-
-    @current_subreddit.setter
-    def current_subreddit(self, new_sbrdt):
-        self.mutex.acquire()
-        self._current_subreddit = new_sbrdt
-        self.mutex.release()
-
 
 class RedditReadBot(RedditBot):
-    def __init__(self, subreddits=[], user_agent=None):
-        super(RedditReadBot, self).__init__(subreddits, user_agent)
+    def __init__(self, db, user_agent=None, state=None):
+        """
+        :param user_agent: for reddit non auth and non oauth client
+        :param lcp: low copies posts if persisted
+        :param cp:  commented posts if persisted
+        :return:
+        """
+        super(RedditReadBot, self).__init__(user_agent)
 
-    def find_comment(self, at_subreddit=None):
+        self.db = db
+
+        if state is None:
+            state = {}
+
+        self.low_copies_posts = state.get("lcp") or set()
+        self.commented_posts = state.get("cp") or set()
+
+    @property
+    def state(self):
+        return {"lcp": list(self.low_copies_posts), "cp": list(self.commented_posts)}
+
+    def find_comment(self, at_subreddit):
         def cmp_by_created_utc(x, y):
             result = x.created_utc - y.created_utc
             if result > 0.5:
@@ -181,11 +139,11 @@ class RedditReadBot(RedditBot):
                 return 0
 
         while 1:
-            subreddit = at_subreddit or random.choice(self.subreddits)
+            subreddit = at_subreddit
             self.current_subreddit = subreddit
             all_posts = self.get_hot_and_new(subreddit, sort=cmp_by_created_utc)
             for post in all_posts:
-                if self.last_actions.is_acted(A_COMMENT, post.fullname) or post.url in self.low_copies_posts:
+                if post.fullname in self.commented_posts or post.url in self.low_copies_posts or db.is_post_commented(post.fullname):
                     continue
                 copies = self._get_post_copies(post)
                 copies = filter(lambda copy: _so_long(copy.created_utc, min_comment_create_time_difference) and \
@@ -199,7 +157,7 @@ class RedditReadBot(RedditBot):
                             if comment and post.author != comment.author:
                                 log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (
                                     comment, post.fullname, subreddit))
-                                self.last_actions.set_action(A_COMMENT, post.fullname)
+                                self.commented_posts.add(post.fullname)
                                 return post.fullname, comment.body
                 else:
                     self.low_copies_posts.add(post.url)
@@ -257,29 +215,27 @@ def check_any_login(login):
 
 
 class RedditWriteBot(RedditBot):
-    def __init__(self, db, subreddits=[], login="Shlak2k15"):
+    def __init__(self, db, login="Shlak2k15", state=None):
         """
         :param subreddits: subbreddits which this bot will comment
         :param login_credentials:  dict object with this attributes: client_id, client_secret, redirect_url, access_token, refresh_token, login and password of user and user_agent 
          user agent can not present it will use some default user agent
         :return:
         """
-        super(RedditWriteBot, self).__init__(subreddits)
+        super(RedditWriteBot, self).__init__()
+
+        if state is None:
+            state = {}
+        self.subscribed_subreddits = state.get("ss") or set()
+        self.friends = state.get("frds") or set()
+
         self.db = db
         login_credentials = db.get_bot_access_credentials(login)
+
         self.init_engine(login_credentials)
         self.init_work_cycle()
-        log.info("Write bot inited with params \n %s" % (login_credentials))
 
-    @net_tryings
-    def check_login(self):
-        res = requests.get(
-                "http://www.reddit.com/api/username_available.json?user=%s" % self.user_name,
-                headers={"origin": "http://www.reddit.com"})
-        if res.status_code != 200:
-            log.error("Check login [%s] is err :( ,%s " % (self.user_name, res))
-            return False
-        return True
+        log.info("Write bot inited with params \n %s" % (login_credentials))
 
     def init_engine(self, login_credentials):
         self.user_agent = login_credentials.get("user_agent", random.choice(USER_AGENTS))
@@ -342,6 +298,15 @@ class RedditWriteBot(RedditBot):
             self.incr_cnt(step_type)
 
         self.db.save_log_bot_row(self.user_name, step_type, info or {})
+        self.persist_state()
+
+    @property
+    def state(self):
+        return {"ss": list(self.subscribed_subreddits),
+                "frds": list(self.friends)}
+
+    def persist_state(self):
+        self.db.update_bot_state(self.user_name, state=self.state)
 
     def do_see_post(self, post,
                     subscribe=9,
@@ -386,10 +351,10 @@ class RedditWriteBot(RedditBot):
                     self.wait(max_wait_time / 10)
                     if self._is_want_to(comment_friend) and vote_count > 0:  # friend comment author
                         c_author = comment.author
-                        if c_author.name not in self.friends:
+                        if c_author.fullname not in self.friends:
                             c_author.friend()
-                            self.friends.add(c_author.name)
-                            self.register_step(A_FRIEND, info={"friend": c_author.name})
+                            self.friends.add(c_author.fullname)
+                            self.register_step(A_FRIEND, info={"friend": c_author.fullname})
                             self.wait(max_wait_time / 10)
 
                 if self._is_want_to(comment_url):  # go to url in comment
@@ -411,13 +376,12 @@ class RedditWriteBot(RedditBot):
 
         if self._is_want_to(author_friend) and post.author.fullname not in self.friends:  # friend post author
             post.author.friend()
-            self.friends.add(post.author.name)
-            self.register_step(A_FRIEND, info={"friend": post.author.name})
+            self.friends.add(post.author.fullname)
+            self.register_step(A_FRIEND, info={"friend": post.author.fullname})
             self.wait(max_wait_time / 5)
 
     def wait(self, max_wait_time):
         wt = random.randint(1, max_wait_time)
-        log.info("wait time: %s" % wt)
         time.sleep(wt)
         return wt
 
@@ -461,9 +425,11 @@ class BotKapellmeister(Process):
     def __init__(self, wb_name, db, ):
         super(BotKapellmeister, self).__init__()
         self.db = db
+        state = db.get_bot_state(wb_name)
         self.bot_name = wb_name
-        self.r_bot = RedditReadBot()
-        self.w_bot = RedditWriteBot(db, login=self.bot_name)
+
+        self.r_bot = RedditReadBot(db,state=state)
+        self.w_bot = RedditWriteBot(db, login=wb_name, state=state)
 
     def bot_check(self):
         ok = check_any_login(self.bot_name)
@@ -477,6 +443,9 @@ class BotKapellmeister(Process):
                 break
             for subreddit in self.db.get_bot_subs(self.bot_name):
                 post_fullname, comment_text = self.r_bot.find_comment(subreddit)
+                self.db.update_bot_state(self.bot_name, self.r_bot.state)
+                self.db.set_posts_commented(self.r_bot.state.get("cp"))
+
                 self.w_bot.do_comment_post(post_fullname, subreddit, comment_text, max_post_near=100)
 
             self.w_bot.wait(3600)

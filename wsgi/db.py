@@ -72,6 +72,10 @@ class DBHandler(object):
         self.bot_config = db.get_collection("bot_config")
         self.bot_config.create_index([("user", pymongo.ASCENDING)], unique=True)
 
+        self.commented_posts = db.get_collection("commented_posts")
+        self.commented_posts.create_index([("fullname", pymongo.ASCENDING)], unique=True)
+
+
     def update_bot_access_credentials_info(self, user, info):
         if isinstance(info.get("scope"), set):
             info['scope'] = list(info['scope'])
@@ -122,10 +126,29 @@ class DBHandler(object):
         self.bot_config.update_one({"user": name}, {"$set": {"subs": subreddits}})
 
     def get_bot_subs(self, name):
-        found = self.bot_config.find_one({"user":name})
+        found = self.bot_config.find_one({"user": name})
         if found:
             return found.get("subs", None)
         return None
+
+    def update_bot_state(self, name, state):
+        self.bot_config.update_one({"user": name}, {"$set": state})
+
+
+    def get_bot_state(self, name):
+        found = self.bot_config.find_one({"user": name})
+        if found:
+            return {"ss": set(found.get("ss", [])), #subscribed subreddits
+                    "frds": set(found.get("friends", [])), # friends
+                    "lcp": set(found.get("lcp",[])), #low copies count
+                    "cp":set(found.get("cp",[])) #commented posts
+                    }
+
+    def set_posts_commented(self, posts):
+        self.commented_posts.insert_many([{"fullname":x} for x in posts])
+
+    def is_post_commented(self, post_fullname):
+        return self.commented_posts.find_one({"fullname":post_fullname}) != None
 
     def save_log_bot_row(self, bot_name, action_name, info):
         self.bot_log.insert_one(
@@ -135,11 +158,11 @@ class DBHandler(object):
                  "info": info})
 
     def get_log_of_bot(self, bot_name):
-        return list(self.bot_log.find({"bot_name":bot_name}).sort("time", pymongo.DESCENDING))
+        return list(self.bot_log.find({"bot_name": bot_name}).sort("time", pymongo.DESCENDING))
 
     def get_log_of_bot_statistics(self, bot_name):
         pipeline = [
-            {"$match": {"bot_name": bot_name }},
+            {"$match": {"bot_name": bot_name}},
             {"$group": {"_id": "$action", "count": {"$sum": 1}}},
         ]
         return list(self.bot_log.aggregate(pipeline))
