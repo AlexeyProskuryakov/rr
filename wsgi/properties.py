@@ -46,6 +46,7 @@ logger.getChild("bot").addHandler(fh_bot)
 print "i want to setting level url lib"
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
 print "i want..."
 
 

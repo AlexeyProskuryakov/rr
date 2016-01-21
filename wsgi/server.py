@@ -16,7 +16,7 @@ from db import DBHandler
 from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 
-from wsgi.bot.bot import BotKapellmeister
+from wsgi.bot.bot import BotKapellmeister, BotOrchestra
 from wsgi.engine import reddit_search, Retriever
 from wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min
 from wsgi.wake_up import WakeUp
@@ -426,20 +426,7 @@ def bot_auth_end():
     return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info, "code": code})
 
 
-worked_bots = {}
-
-
-def start_bot(name):
-    bc = BotKapellmeister(name,  db)
-    bc.daemon = True
-    bc.start()
-    worked_bots[name] = bc
-
-def stop_bot(name):
-    if name in worked_bots:
-        worked_bots[name].will_must_stop()
-        worked_bots[name].join(5)
-        del worked_bots[name]
+bot_orchestra = BotOrchestra()
 
 @login_required
 @app.route("/bots/new", methods=["POST", "GET"])
@@ -453,12 +440,13 @@ def bots_new():
         log.info("Add subreddits: \n%s\n and bot with name: %s" % ('\n'.join([el for el in subreddits]), bot_name))
 
         db.set_bot_subs(bot_name,subreddits)
-        if bot_name not in worked_bots:
-            start_bot(bot_name)
+
+        bot_orchestra.add_bot(bot_name)
+
 
         return redirect(url_for('bots_info', name=bot_name))
 
-    return render_template("bots_management.html", **{"bots": db.get_bots_info(), "worked_bots": worked_bots.keys()})
+    return render_template("bots_management.html", **{"bots": db.get_bots_info(), "worked_bots": bot_orchestra.bots.keys()})
 
 
 @login_required
@@ -466,9 +454,11 @@ def bots_new():
 def bots_info(name):
     if request.method == "POST":
         if request.form.get("stop"):
-            stop_bot(name)
+            bot_orchestra.stop_bot(name)
         if request.form.get("start"):
-            start_bot(name)
+            bot_orchestra.add_bot(name)
+
+
 
     bot_log = db.get_log_of_bot(name)
     stat = db.get_log_of_bot_statistics(name)
@@ -480,7 +470,7 @@ def bots_info(name):
                                                "bot_stat":  stat,
                                                "bot_log": bot_log,
                                                "banned": banned,
-                                               "worked": name in worked_bots,
+                                               "worked": bot_orchestra.is_worked(name),
                                                "subs": bot_subs or [],
                                                })
 

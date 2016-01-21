@@ -2,6 +2,8 @@ from datetime import datetime
 import hashlib
 
 import time
+from multiprocessing.synchronize import Lock
+
 import pymongo
 
 from pymongo import MongoClient
@@ -11,6 +13,7 @@ from wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger
 __author__ = 'alesha'
 
 log = logger.getChild("DB")
+lock = Lock()
 
 
 class StatisticsCache(object):
@@ -131,7 +134,15 @@ class DBHandler(object):
         return None
 
     def update_bot_state(self, name, state):
-        self.bot_config.update_one({"user": name}, {"$set": state})
+        update = {}
+        if state.get("ss"):
+            update["ss"] = {"$each":state['ss']}
+        if state.get("frds"):
+            update["frds"] = {"$each": state['frds']}
+        if update:
+            update = {"$addToSet":update}
+            result = self.bot_config.update_one({"user": name}, update)
+
 
     def get_bot_state(self, name):
         found = self.bot_config.find_one({"user": name})
@@ -141,13 +152,27 @@ class DBHandler(object):
                     "cp": set(found.get("cp", []))  # commented posts
                     }
 
-    def set_posts_commented(self, posts):
-        to_save = set([el.get("fullname") for el in self.commented_posts.find({})]).difference(set(posts))
-        if len(to_save):
-            self.commented_posts.insert_many([{"fullname": x} for x in to_save])
+    def set_bot_live_configuration(self, name, configuration):
+        self.bot_config.update_one({'user':name}, {"$set":{"live_config":configuration.data}})
+
+    def get_bot_live_configuration(self, name):
+        found = self.bot_config.find_one({"user":name})
+        if found:
+            live_config = found.get("live_config")
+            return live_config
+
+
+
+    def set_post_commented(self, post_fullname):
+        found = self.commented_posts.find_one({"fullname": post_fullname})
+        if not found:
+            self.commented_posts.insert_one({"fullname": post_fullname})
 
     def is_post_commented(self, post_fullname):
-        return self.commented_posts.find_one({"fullname": post_fullname}) != None
+        found = self.commented_posts.find_one({"fullname": post_fullname})
+        return found != None
+
+
 
     def save_log_bot_row(self, bot_name, action_name, info):
         self.bot_log.insert_one(
@@ -165,6 +190,8 @@ class DBHandler(object):
             {"$group": {"_id": "$action", "count": {"$sum": 1}}},
         ]
         return list(self.bot_log.aggregate(pipeline))
+
+
 
     def add_search_params(self, sbrdt_name, params, statistic):
         ps = self.get_search_params(sbrdt_name)
