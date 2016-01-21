@@ -39,9 +39,6 @@ min_donor_comment_ups = 3
 max_donor_comment_ups = 100000
 min_donor_num_comments = 50
 
-min_selection_comments = 10
-max_selection_comments = 20
-
 max_consuming = 90
 min_consuming = 70
 

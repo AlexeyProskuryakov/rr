@@ -5,8 +5,8 @@
 <div class="container-fluid">
 
     <div class="row">
-        <div class="col-md-3">
 
+        <div class="col-md-3">
             <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
                 {% if not worked %}
                 <input type="hidden" name="start">
@@ -15,10 +15,8 @@
                 {% endif %}
                 <input type="submit" value="(Re)Start bot">
             </form>
-
-
-
         </div>
+
         <div class="col-md-6">
             <h1>Information of {{bot_name}}
                 <small>(banned? {{banned}} worked? {{worked}})</small>
@@ -33,6 +31,16 @@
                     <th>
                         {{row.get("count")}}
                     </th>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+
+        <div class="col-md-3">
+            <table class="table table-striped">
+                {% for sub in subs %}
+                <tr>
+                    <td>{{sub}}</td>
                 </tr>
                 {% endfor %}
             </table>
@@ -66,9 +74,12 @@
     </div>
 </div>
 <script>
+
     setTimeout(function(){
         window.location.reload(1);
-    }, 5000);
+    }, 10000);
+
+
 </script>
 {% endblock %}
 

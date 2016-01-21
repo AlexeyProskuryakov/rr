@@ -473,8 +473,16 @@ def bots_info(name):
     bot_log = db.get_log_of_bot(name)
     stat = db.get_log_of_bot_statistics(name)
     banned = db.is_bot_banned(name)
-    return render_template("bot_info.html", **{"bot_name": name, "bot_stat": stat, "bot_log": bot_log, "banned": banned,
-                                               "worked": name in worked_bots})
+
+    bot_subs = db.get_bot_subs(name)
+
+    return render_template("bot_info.html", **{"bot_name": name,
+                                               "bot_stat":  stat,
+                                               "bot_log": bot_log,
+                                               "banned": banned,
+                                               "worked": name in worked_bots,
+                                               "subs": bot_subs or [],
+                                               })
 
 
 @app.route("/wake_up/<salt>", methods=["POST"])
