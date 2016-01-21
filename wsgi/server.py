@@ -465,10 +465,10 @@ def bots_new():
 @app.route("/bots/<name>", methods=["POST", "GET"])
 def bots_info(name):
     if request.method == "POST":
-        if request.form.get("restart"):
+        if request.form.get("stop"):
             stop_bot(name)
-
-        start_bot(name)
+        if request.form.get("start"):
+            start_bot(name)
 
     bot_log = db.get_log_of_bot(name)
     stat = db.get_log_of_bot_statistics(name)
@@ -490,17 +490,17 @@ def wake_up(salt):
     return jsonify(**{"result": salt})
 
 
-spw = SubredditProcessWorker(tq, rq, db)
-spw.daemon = True
-spw.start()
-
-su = SubredditUpdater(tq, db)
-su.daemon = True
-su.start()
-
-pu = PostUpdater(db)
-pu.daemon = True
-pu.start()
+# spw = SubredditProcessWorker(tq, rq, db)
+# spw.daemon = True
+# spw.start()
+#
+# su = SubredditUpdater(tq, db)
+# su.daemon = True
+# su.start()
+#
+# pu = PostUpdater(db)
+# pu.daemon = True
+# pu.start()
 
 
 url = "http://read-shlak0bl0k.rhcloud.com"

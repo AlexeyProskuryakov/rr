@@ -138,7 +138,6 @@ class DBHandler(object):
         if found:
             return {"ss": set(found.get("ss", [])),  # subscribed subreddits
                     "frds": set(found.get("friends", [])),  # friends
-                    "lcp": set(found.get("lcp", [])),  # low copies count
                     "cp": set(found.get("cp", []))  # commented posts
                     }
 

@@ -120,12 +120,12 @@ class RedditReadBot(RedditBot):
         if state is None:
             state = {}
 
-        self.low_copies_posts = state.get("lcp") or set()
         self.commented_posts = state.get("cp") or set()
+        self.low_copies_posts = set()
 
     @property
     def state(self):
-        return {"lcp": list(self.low_copies_posts), "cp": list(self.commented_posts)}
+        return {"cp": list(self.commented_posts)}
 
     def find_comment(self, at_subreddit):
         def cmp_by_created_utc(x, y):

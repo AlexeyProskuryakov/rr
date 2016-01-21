@@ -7,14 +7,21 @@
     <div class="row">
 
         <div class="col-md-3">
-            <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
-                {% if not worked %}
-                <input type="hidden" name="start">
-                {% else %}
-                <input type="hidden" name="restart">
-                {% endif %}
-                <input type="submit" value="(Re)Start bot">
-            </form>
+            <div class="row">
+                <div class="col-md-6">
+                    <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
+                        <input type="hidden" name="start" value="!">
+                        <input type="submit" value="Start bot">
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
+                        <input type="hidden" name="stop" value="!">
+                        <input type="submit" value="Stop bot">
+                    </form>
+                </div>
+            </div>
+
         </div>
 
         <div class="col-md-6">
@@ -37,6 +44,7 @@
         </div>
 
         <div class="col-md-3">
+            <h3>Subreddits:</h3>
             <table class="table table-striped">
                 {% for sub in subs %}
                 <tr>
@@ -78,6 +86,7 @@
     setTimeout(function(){
         window.location.reload(1);
     }, 10000);
+
 
 
 </script>
