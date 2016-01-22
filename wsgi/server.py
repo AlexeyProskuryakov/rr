@@ -460,18 +460,21 @@ def bots_info(name):
 
 
 
-    bot_log = db.get_log_of_bot(name)
+    bot_log = db.get_log_of_bot(name, 100)
     stat = db.get_log_of_bot_statistics(name)
     banned = db.is_bot_banned(name)
 
-    bot_subs = db.get_bot_subs(name)
+    bot_cfg = db.get_bot_config(name)
 
     return render_template("bot_info.html", **{"bot_name": name,
                                                "bot_stat":  stat,
                                                "bot_log": bot_log,
                                                "banned": banned,
                                                "worked": bot_orchestra.is_worked(name),
-                                               "subs": bot_subs or [],
+                                               "subs": bot_cfg.get("subs", []),
+                                               "config":bot_cfg.get("live_config"),
+                                               "ss": bot_cfg.get("ss",[]),
+                                               "friends":bot_cfg.get("frds",[])
                                                })
 
 

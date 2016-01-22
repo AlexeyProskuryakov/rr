@@ -6,60 +6,139 @@
 
     <div class="row">
 
-        <div class="col-md-3">
+        <div class="col-md-5">
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-3">
                     <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
                         <input type="hidden" name="start" value="!">
-                        <input type="submit" value="Start bot">
+                        <input type="submit" value="Start bot" class="btn btn-info btn-lg">
                     </form>
                 </div>
-                <div class="col-md-6">
+
+                <div class="col-md-3">
                     <form action="{{url_for('bots_info', name=bot_name)}}" method="post">
                         <input type="hidden" name="stop" value="!">
-                        <input type="submit" value="Stop bot">
+                        <input type="submit" value="Stop bot" class="btn btn-danger btn-lg">
+                    </form>
+                </div>
+                 <div class="col-md-3">
+                    <button class="btn btn-success btn-big btn-lg" onclick="window.location.reload(0);">RELOAD THIS PAGE
+                    </button>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-8 col-md-offset-2">
+                    <h2>Parameters of life: <br> <small>% it is predicate: random(0,10) &gt; % </small></h2>
+                    <form action="{{url_for('bots_info', name=bot_name)}}" method="post" class="form-horizontal">
+                        <div class="form-group">
+                            <label for="max_wait_time">Max wait time in any iteration</label>
+                            <input name="max_wait_time" type="number" value="{{config['max_wait_time']}}"
+                                   id="max_wait_time">
+                        </div>
+                        <div class="form-group">
+                            <label for="max_post_near_commented">Max posts near commented</label>
+                            <input name="max_post_near_commented" type="number"
+                                   value="{{config['max_post_near_commented']}}"
+                                   id="max_post_near_commented">
+                        </div>
+                        <div class="form-group">
+                            <label for="post_vote">Post vote %</label>
+                            <input name="post_vote" type="number" value="{{config['post_vote']}}" id="post_vote">
+                        </div>
+                        <div class="form-group">
+                            <label for="subscribe">Subscribe percentage</label>
+                            <input name="subscribe" type="number" value="{{config['subscribe']}}" id="subscribe">
+                        </div>
+                        <div class="form-group">
+                            <label for="author_friend">Post author friend %</label>
+                            <input name="author_friend" type="number" value="{{config['author_friend']}}"
+                                   id="author_friend">
+                        </div>
+                        <div class="form-group">
+                            <label for="comments">Work with comments %</label>
+                            <input name="comments" type="number" value="{{config['comments']}}" id="comments">
+                        </div>
+                        <div class="form-group">
+                            <label for="comment_mwt">Min wait after see post for work with comments</label>
+                            <input name="comment_mwt" type="number" value="{{config['comment_mwt']}}" id="comment_mwt">
+                        </div>
+                        <div class="form-group">
+                            <label for="comment_vote">Comment vote %</label>
+                            <input name="comment_vote" type="number" value="{{config['comment_vote']}}"
+                                   id="comment_vote">
+                        </div>
+                        <div class="form-group">
+                            <label for="comment_friend">Comment author do friendship %</label>
+                            <input name="comment_friend" type="number" value="{{config['comment_friend']}}"
+                                   id="comment_friend">
+                        </div>
+                        <div class="form-group">
+                            <label for="comment_url">Consume comments url %</label>
+                            <input name="comment_url" type="number" value="{{config['comment_url']}}" id="comment_url">
+                        </div>
+
+                        <input type="submit" value="Apply parameters" class="btn btn-lg btn-primary">
                     </form>
                 </div>
             </div>
-
         </div>
 
-        <div class="col-md-6">
-            <h1>Information of {{bot_name}}
-                <small>(banned? {{banned}} worked? {{worked}})</small>
-            </h1>
-            <h3> Statistics of bot actions:</h3>
-            <table class="table table-stripped">
-                {% for row in bot_stat %}
-                <tr>
-                    <th>
-                        {{row.get("_id")}}
-                    </th>
-                    <th>
-                        {{row.get("count")}}
-                    </th>
-                </tr>
-                {% endfor %}
-            </table>
-        </div>
+        <div class="col-md-5">
+            <div class="row">
+                <h1>Information of {{bot_name}}
+                    <small>(banned? {{banned}} worked? {{worked}})</small>
+                </h1>
+                <h3> Statistics of bot actions:</h3>
+                <table class="table table-stripped">
+                    {% for row in bot_stat %}
+                    <tr>
+                        <th>
+                            {{row.get("_id")}}
+                        </th>
+                        <th>
+                            {{row.get("count")}}
+                        </th>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
 
-        <div class="col-md-3">
-            <h3>Subreddits:</h3>
-            <table class="table table-striped">
-                {% for sub in subs %}
-                <tr>
-                    <td>{{sub}}</td>
-                </tr>
-                {% endfor %}
-            </table>
+            <div class="row">
+                <h3>Subreddits:</h3>
+                <table class="table table-striped">
+                    {% for sub in subs %}
+                    <tr>
+                        <td>{{sub}}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <div class="row">
+                <h3>Friends:</h3>
+                <table class="table table-striped">
+                    {% for friend in friends %}
+                    <tr>
+                        <td>{{friend}}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <div class="row">
+                <h3>Subscribed subs:</h3>
+                <table class="table table-striped">
+                    {% for s in ss %}
+                    <tr>
+                        <td>{{s}}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
         </div>
 
     </div>
-
-
     <div class="row">
         <div class="col-md-6 col-md-offset-3">
-            <h3>Bot log:</h3>
+            <h3>Bot log (last 100 actions):</h3>
         </div>
         <table class="table table-striped">
             <tbody>
@@ -70,6 +149,7 @@
                 </th>
                 <th class="col-md-8">
                     {{row.get("info")}}
+
                 </th>
                 <th class="col-md-2">
                     {{row.get("time")}}
@@ -81,15 +161,7 @@
 
     </div>
 </div>
-<script>
 
-    setTimeout(function(){
-        window.location.reload(1);
-    }, 10000);
-
-
-
-</script>
 {% endblock %}
 
 {% endblock %}

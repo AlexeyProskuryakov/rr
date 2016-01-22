@@ -104,7 +104,7 @@ def _so_long(created, min_time):
 
 
 class BotConfiguration(object):
-    def __init__(self, data = None):
+    def __init__(self, data=None):
         """
         Configuration of bot live
         :return:
@@ -123,7 +123,7 @@ class BotConfiguration(object):
             self.max_post_near_commented = 50
             self.subscribe_subreddit = 7
         elif isinstance(data, dict):
-            for k,v in data.iteritems():
+            for k, v in data.iteritems():
                 self.__dict__[k] = v
 
     def set(self, conf_name, conf_val):
@@ -258,7 +258,9 @@ class RedditReadBot(RedditBot):
         result = set(map(lambda x: x.body, result))
         return result
 
+
 bot_mutex = Lock()
+
 
 def bot_synchronised(fn):
     def wrapped(*args, **kwargs):
@@ -405,7 +407,7 @@ class RedditWriteBot(RedditBot):
             self.register_step(A_VOTE, info={"fullname": post.fullname, "vote": vote_count})
             self.wait(self.configuration.max_wait_time / 2)
 
-        if self._is_want_to(self.configuration.comments) and wt > 5:  # go to post comments
+        if self._is_want_to(self.configuration.comments) and wt > self.configuration.comment_mwt:  # go to post comments
             for comment in post.comments:
                 if self._is_want_to(self.configuration.comment_vote) and self.can_do("vote"):  # voting comment
                     vote_count = random.choice([1, -1])
@@ -452,7 +454,8 @@ class RedditWriteBot(RedditBot):
             self.register_step(A_SUBSCRIBE, info={"sub": post.subreddit.display_name})
             self.wait(self.configuration.max_wait_time / 5)
 
-        if self._is_want_to(self.configuration.author_friend) and post.author.name not in self.friends:  # friend post author
+        if self._is_want_to(
+                self.configuration.author_friend) and post.author.name not in self.friends:  # friend post author
             try:
                 post.author.friend()
             except Exception as e:
@@ -466,7 +469,7 @@ class RedditWriteBot(RedditBot):
     @bot_synchronised
     def set_configuration(self, configuration):
         self.configuration = configuration
-        log.info("For %s configuration is setted: %s"%(self.user_name, configuration.data))
+        log.info("For %s configuration is setted: %s" % (self.user_name, configuration.data))
 
     def wait(self, max_wait_time):
         if max_wait_time > 1:
@@ -517,7 +520,8 @@ class RedditWriteBot(RedditBot):
                     log.error(e)
 
         try:
-            if self._is_want_to(self.configuration.subscribe_subreddit) and subreddit_name not in self.subscribed_subreddits:
+            if self._is_want_to(
+                    self.configuration.subscribe_subreddit) and subreddit_name not in self.subscribed_subreddits:
                 self.reddit.subscribe(subreddit_name)
                 self.register_step(A_SUBSCRIBE, info={"sub": subreddit_name})
         except Exception as e:
@@ -574,11 +578,17 @@ class BotKapellmeister(Process):
                     break
                 for sub in self.db.get_bot_subs(self.bot_name):
                     queue = self.r_bot.start_retrieve_comments(sub)
-                    try:
-                        to_comment_info = queue.get_nowait()
+                    if not self.w_bot.can_do(A_COMMENT):
+                        try:
+                            to_comment_info = queue.get_nowait()
+                            self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
+                        except Exception as e:
+                            pass
+                    else:
+                        log.info("%s will wait for comment..." % self.bot_name)
+                        to_comment_info = queue.get()
                         self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
-                    except Exception as e:
-                        pass
+
                     self.w_bot.live()
 
                 sleep_time = random.randint(100, 3600)
@@ -638,7 +648,9 @@ class BotOrchestra():
             def f():
                 bot_config = self.db.get_bot_live_configuration(bot_name)
                 self.bots[bot_name].set_config(bot_config)
-            Process(name="config updater",target=f).start()
+
+            Process(name="config updater", target=f).start()
+
 
 if __name__ == '__main__':
     bot_name = "Shlak2k15"
@@ -655,24 +667,25 @@ if __name__ == '__main__':
 
 
 
-# bot = RedditWriteBot(db, "Shlak2k15")
-# me = bot.reddit.get_me()
-# sbrdt = bot.reddit.get_subreddit("videos")
-# hot = list(sbrdt.get_hot())
-# post = random.choice(hot)
-# result = post.author.friend()
-# print result
+    # bot = RedditWriteBot(db, "Shlak2k15")
+    # me = bot.reddit.get_me()
+    # sbrdt = bot.reddit.get_subreddit("videos")
+    # hot = list(sbrdt.get_hot())
+    # post = random.choice(hot)
+    # result = post.author.friend()
+    # print result
 
-# BotKapellmeister("Shlak2k15", db).start()
+    # BotKapellmeister("Shlak2k15", db).start()
 
     bot_name2 = "Shlak2k16"
     orch = BotOrchestra()
 
+
     def test_bot(orch):
         log.info("Start test bots")
-        bnw =orch.is_worked(bot_name)
+        bnw = orch.is_worked(bot_name)
         bn2w = orch.is_worked(bot_name2)
-        log.info("%s worked? %s; %s worker? %s"%(bot_name, bnw, bot_name2, bn2w))
+        log.info("%s worked? %s; %s worker? %s" % (bot_name, bnw, bot_name2, bn2w))
         time.sleep(5)
 
 
@@ -688,4 +701,3 @@ if __name__ == '__main__':
     test_bot(orch)
     orch.stop_bot(bot_name2)
     test_bot(orch)
-

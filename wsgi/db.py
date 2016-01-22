@@ -161,7 +161,8 @@ class DBHandler(object):
             live_config = found.get("live_config")
             return live_config
 
-
+    def get_bot_config(self, name):
+        return self.bot_config.find_one({"user":name})
 
     def set_post_commented(self, post_fullname):
         found = self.commented_posts.find_one({"fullname": post_fullname})
@@ -181,8 +182,11 @@ class DBHandler(object):
                  "time": datetime.utcnow(),
                  "info": info})
 
-    def get_log_of_bot(self, bot_name):
-        return list(self.bot_log.find({"bot_name": bot_name}).sort("time", pymongo.DESCENDING))
+    def get_log_of_bot(self, bot_name, limit=None):
+        res = self.bot_log.find({"bot_name": bot_name}).sort("time", pymongo.DESCENDING)
+        if limit:
+            res = res.limit(limit)
+        return list(res)
 
     def get_log_of_bot_statistics(self, bot_name):
         pipeline = [
