@@ -62,7 +62,7 @@ tryings_count = 10
 
 time_step_less_iteration_power = 0.85
 
-test_mode = True
+test_mode = os.environ.get("RR_TEST", True)
 
 
 logger.info("RR MANAGEMENT SYSTEM STARTED... \nEnv:%s"%os.environ)

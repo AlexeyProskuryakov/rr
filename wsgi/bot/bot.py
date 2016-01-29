@@ -554,9 +554,9 @@ class RedditWriteBot(RedditBot):
         counter = 0
         for x in xrange(max_iters):
             random_sub = random.choice(self.db.get_bot_subs(self.user_name))
-            if random_sub in sub_posts:
+            if random_sub not in sub_posts:
                 sbrdt = self.reddit.get_subreddit(random_sub)
-                hot_posts = sbrdt.get_hot(limit=posts_limit)
+                hot_posts = list(sbrdt.get_hot(limit=posts_limit))
                 sub_posts[random_sub] = hot_posts
             else:
                 hot_posts = sub_posts[random_sub]
@@ -609,7 +609,7 @@ class BotKapellmeister(Process):
                         to_comment_info = queue.get()
                         self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
 
-                    self.w_bot.live_random()
+                    self.w_bot.live_random(posts_limit=150)
 
                 sleep_time = random.randint(100, 60*60/2)
                 log.info("Bot [%s] will sleep %s seconds" % (self.bot_name, sleep_time))
