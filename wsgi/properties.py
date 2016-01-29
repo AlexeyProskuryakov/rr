@@ -43,12 +43,9 @@ fh_bot.setFormatter(formatter_bot)
 logger.getChild("bot").addHandler(fh_bot)
 
 
-print "i want to setting level url lib"
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
-print "i want..."
-
 
 SRC_SEARCH = "search"
 SRC_OBSERV = "observation"
@@ -64,3 +61,8 @@ step_time_after_trying = 60
 tryings_count = 10
 
 time_step_less_iteration_power = 0.85
+
+test_mode = True
+
+
+logger.info("RR MANAGEMENT SYSTEM STARTED... \nEnv:%s"%os.environ)

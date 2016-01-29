@@ -180,6 +180,7 @@ class RedditReadBot(RedditBot):
         self.queues[sub] = Queue()
 
         def f():
+            log.info("Will start find comments for [%s]"%(sub))
             for el in self.find_comment(sub):
                 self.queues[sub].put(el)
 
@@ -208,15 +209,17 @@ class RedditReadBot(RedditBot):
                                 copies)
                 if len(copies) >= min_copy_count:
                     copies.sort(cmp=cmp_by_created_utc)
+                    comment = None
                     for copy in copies:
                         if copy.subreddit != post.subreddit and copy.fullname != post.fullname:
                             comment = self._retrieve_interested_comment(copy)
                             if comment and post.author != comment.author:
-                                log.info("comment: [%s] \nin post [%s] at subreddit [%s]" % (
+                                log.info("Find comment: [%s] \nin post [%s] at subreddit [%s]" % (
                                     comment, post.fullname, subreddit))
-                                db.set_post_commented(post.fullname)
-                                yield {"post": post.fullname, "comment": comment.body}
                                 break
+                    if comment:
+                        yield {"post": post.fullname, "comment": comment.body}
+
                 else:
                     self.low_copies_posts.add(post.url)
             except Exception as e:
@@ -321,14 +324,19 @@ class RedditWriteBot(RedditBot):
         self.db.update_bot_access_credentials_info(self.user_name, self.access_information)
         self.reddit.login(self.login_credentials["user"], self.login_credentials["pwd"], disable_warning=True)
 
-    def incr_cnt(self, name):
+    def incr_counter(self, name):
         self.counters[name] += 1
 
+    @property
+    def action_function_params(self):
+        return self.__action_function_params
+
+    @action_function_params.setter
+    def action_function_params(self, val):
+        self.__action_function_params = val
+        self.counters ={A_CONSUME: 0, A_VOTE: 0, A_COMMENT: 0, A_POST: 0}
+
     def init_work_cycle(self):
-        self.counters = {A_CONSUME: 0, A_VOTE: 0, A_COMMENT: 0, A_POST: 0}
-
-        self.action_function_params = {}
-
         consuming = random.randint(min_consuming, max_consuming)
         production = 100 - consuming
 
@@ -338,7 +346,7 @@ class RedditWriteBot(RedditBot):
         production_voting = (prod_voting * production) / 100
         production_commenting = (prod_commenting * production) / 100
 
-        self.action_function_params = {A_CONSUME: consuming,
+        self.action_function_params  = {A_CONSUME: consuming,
                                        A_VOTE: production_voting,
                                        A_COMMENT: production_commenting}
         log.info("MY [%s] WORK CYCLE: %s" % (self.user_name, self.action_function_params))
@@ -350,18 +358,29 @@ class RedditWriteBot(RedditBot):
         :return:  true or false
         """
         summ = sum(self.counters.values())
-        interested_count = self.counters[action]
+        action_count = self.counters[action]
         granted_perc = self.action_function_params.get(action)
-        current_perc = int((float(interested_count if interested_count else 1) / (summ if summ else 100)) * 100)
+        current_perc = int((float(action_count) / (summ if summ else 100)) * 100)
 
         return current_perc <= granted_perc
+
+    def must_do(self, action):
+        # result = reduce(lambda r, a: r and not self.can_do(a),
+        #                 [a for a in self.action_function_params.keys() if a != action],
+        #                 True)
+        result = True
+        for another_action in self.action_function_params.keys():
+            if another_action == action:
+                continue
+            result = result and not self.can_do(another_action)
+        return result
 
     def _is_want_to(self, coefficient):
         return coefficient >= 0 and random.randint(0, 10) >= coefficient
 
     def register_step(self, step_type, info=None):
         if step_type in self.counters:
-            self.incr_cnt(step_type)
+            self.incr_counter(step_type)
 
         self.db.save_log_bot_row(self.user_name, step_type, info or {})
         self.persist_state()
@@ -510,6 +529,7 @@ class RedditWriteBot(RedditBot):
 
                 try:
                     _post.add_comment(comment_text)
+                    db.set_post_commented(_post.fullname)
                 except Exception as e:
                     log.error(e)
 
@@ -578,9 +598,10 @@ class BotKapellmeister(Process):
                     break
                 for sub in self.db.get_bot_subs(self.bot_name):
                     queue = self.r_bot.start_retrieve_comments(sub)
-                    if not self.w_bot.can_do(A_COMMENT):
+                    if not self.w_bot.must_do(A_COMMENT):
                         try:
                             to_comment_info = queue.get_nowait()
+                            log.info("%s will do comment")
                             self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
                         except Exception as e:
                             pass
@@ -597,8 +618,11 @@ class BotKapellmeister(Process):
 
                 self.w_bot.refresh_token()
             except Exception as e:
-                time.sleep(10)
                 log.exception(e)
+
+            finally:
+
+                time.sleep(10)
 
 
 mutex = Lock()
@@ -654,50 +678,100 @@ class BotOrchestra():
 
 if __name__ == '__main__':
     bot_name = "Shlak2k15"
-    # bot_config = BotConfiguration()
-    # db.set_bot_live_configuration(bot_name, bot_config)
-    #
-    # bot = BotKapellmeister(bot_name, db, RedditReadBot(db))
-    # bot.daemon = True
-    # bot.start()
-    #
-    # time.sleep(10)
-    # bot_config = db.get_bot_live_configuration(bot_name)
-    # bot.set_config(bot_config)
+    bot = RedditWriteBot(db, bot_name)
+
+    bot.action_function_params = {A_CONSUME:33, A_VOTE:33, A_COMMENT:33}
+
+    for i in range(100):
+        assert bot.can_do(A_CONSUME)
+        assert bot.can_do(A_VOTE)
+        assert bot.can_do(A_COMMENT)
+
+        assert not bot.must_do(A_CONSUME)
+        assert not bot.must_do(A_VOTE)
+        assert not bot.must_do(A_COMMENT)
+
+        bot.incr_counter(A_CONSUME)
+        bot.incr_counter(A_VOTE)
+        bot.incr_counter(A_COMMENT)
+
+
+    bot.action_function_params = {A_CONSUME:33, A_VOTE:33, A_COMMENT:33}
+
+
+    assert bot.can_do(A_CONSUME)
+    assert not bot.must_do(A_CONSUME)
+    bot.incr_counter(A_CONSUME)
+
+    assert bot.can_do(A_VOTE)
+    assert not bot.must_do(A_VOTE)
+    bot.incr_counter(A_VOTE)
+        # bot.incr_counter(A_COMMENT)
+
+    assert bot.can_do(A_COMMENT)
+    assert bot.must_do(A_COMMENT)
+    bot.incr_counter(A_COMMENT)
+
+    assert bot.can_do(A_CONSUME)
+    bot.incr_counter(A_CONSUME)
+
+    assert bot.can_do(A_VOTE)
+    bot.incr_counter(A_VOTE)
+
+    bot.incr_counter(A_COMMENT)
+    bot.incr_counter(A_COMMENT)
+    assert not bot.can_do(A_COMMENT)
+
+    assert bot.can_do(A_VOTE)
+    bot.incr_counter(A_VOTE)
+
+    assert bot.can_do(A_CONSUME)
+    assert bot.must_do(A_CONSUME)
+
+        # bot_config = BotConfiguration()
+        # db.set_bot_live_configuration(bot_name, bot_config)
+        #
+        # bot = BotKapellmeister(bot_name, db, RedditReadBot(db))
+        # bot.daemon = True
+        # bot.start()
+        #
+        # time.sleep(10)
+        # bot_config = db.get_bot_live_configuration(bot_name)
+        # bot.set_config(bot_config)
 
 
 
-    # bot = RedditWriteBot(db, "Shlak2k15")
-    # me = bot.reddit.get_me()
-    # sbrdt = bot.reddit.get_subreddit("videos")
-    # hot = list(sbrdt.get_hot())
-    # post = random.choice(hot)
-    # result = post.author.friend()
-    # print result
+        # bot = RedditWriteBot(db, "Shlak2k15")
+        # me = bot.reddit.get_me()
+        # sbrdt = bot.reddit.get_subreddit("videos")
+        # hot = list(sbrdt.get_hot())
+        # post = random.choice(hot)
+        # result = post.author.friend()
+        # print result
 
-    # BotKapellmeister("Shlak2k15", db).start()
+        # BotKapellmeister("Shlak2k15", db).start()
 
-    bot_name2 = "Shlak2k16"
-    orch = BotOrchestra()
-
-
-    def test_bot(orch):
-        log.info("Start test bots")
-        bnw = orch.is_worked(bot_name)
-        bn2w = orch.is_worked(bot_name2)
-        log.info("%s worked? %s; %s worker? %s" % (bot_name, bnw, bot_name2, bn2w))
-        time.sleep(5)
-
-
-    orch.add_bot(bot_name)
-    test_bot(orch)
-    orch.toggle_bot_config(bot_name)
-
-    orch.add_bot(bot_name2)
-    test_bot(orch)
-
-    time.sleep(5 * 60)
-    orch.stop_bot(bot_name)
-    test_bot(orch)
-    orch.stop_bot(bot_name2)
-    test_bot(orch)
+        # bot_name2 = "Shlak2k16"
+        # orch = BotOrchestra()
+        #
+        #
+        # def test_bot(orch):
+        #     log.info("Start test bots")
+        #     bnw = orch.is_worked(bot_name)
+        #     bn2w = orch.is_worked(bot_name2)
+        #     log.info("%s worked? %s; %s worker? %s" % (bot_name, bnw, bot_name2, bn2w))
+        #     time.sleep(5)
+        #
+        #
+        # orch.add_bot(bot_name)
+        # test_bot(orch)
+        # orch.toggle_bot_config(bot_name)
+        #
+        # orch.add_bot(bot_name2)
+        # test_bot(orch)
+        #
+        # time.sleep(5 * 60)
+        # orch.stop_bot(bot_name)
+        # test_bot(orch)
+        # orch.stop_bot(bot_name2)
+        # test_bot(orch)

@@ -16,9 +16,9 @@ from db import DBHandler
 from engine import reddit_get_new
 from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 
-from wsgi.bot.bot import BotKapellmeister, BotOrchestra
+from wsgi.bot.bot import BotKapellmeister, BotOrchestra, BotConfiguration
 from wsgi.engine import reddit_search, Retriever
-from wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min
+from wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min, test_mode
 from wsgi.wake_up import WakeUp
 
 __author__ = '4ikist'
@@ -74,6 +74,7 @@ class UsersHandler(object):
 
     def get_guest(self):
         user = User("Guest", "")
+        user.anonymous = True
         self.users[user.id] = user
         return user
 
@@ -120,6 +121,7 @@ def load_user():
     if session.get("user_id"):
         user = usersHandler.get_by_id(session.get("user_id"))
     else:
+        # user = None
         user = usersHandler.get_guest()
     g.user = user
 
@@ -386,8 +388,9 @@ C_ID = None
 C_SECRET = None
 
 
-@login_required
+
 @app.route("/bot/add_credential", methods=["GET", "POST"])
+@login_required
 def bot_auth_start():
     global C_ID
     global C_SECRET
@@ -395,7 +398,6 @@ def bot_auth_start():
     if request.method == "GET":
         return render_template("bot_add_credentials.html", **{"url": False, "r_u": REDIRECT_URI})
     if request.method == "POST":
-
         C_ID = request.form.get("client_id")
         C_SECRET = request.form.get("client_secret")
         user = request.form.get("user")
@@ -411,8 +413,9 @@ def bot_auth_start():
         return render_template("bot_add_credentials.html", **{"url": url, "r_u": REDIRECT_URI})
 
 
-@login_required
+
 @app.route("/authorize_callback")
+@login_required
 def bot_auth_end():
     state = request.args.get('state', '')
     code = request.args.get('code', '')
@@ -428,8 +431,10 @@ def bot_auth_end():
 
 bot_orchestra = BotOrchestra()
 
-@login_required
+
+
 @app.route("/bots/new", methods=["POST", "GET"])
+@login_required
 def bots_new():
     if request.method == "POST":
         subreddits_raw = request.form.get("sbrdts")
@@ -439,26 +444,32 @@ def bots_new():
         bot_name = bot_name.strip()
         log.info("Add subreddits: \n%s\n and bot with name: %s" % ('\n'.join([el for el in subreddits]), bot_name))
 
-        db.set_bot_subs(bot_name,subreddits)
+        db.set_bot_subs(bot_name, subreddits)
 
         bot_orchestra.add_bot(bot_name)
 
-
         return redirect(url_for('bots_info', name=bot_name))
 
-    return render_template("bots_management.html", **{"bots": db.get_bots_info(), "worked_bots": bot_orchestra.bots.keys()})
+    return render_template("bots_management.html",
+                           **{"bots": db.get_bots_info(), "worked_bots": bot_orchestra.bots.keys()})
 
 
-@login_required
+
 @app.route("/bots/<name>", methods=["POST", "GET"])
+@login_required
 def bots_info(name):
     if request.method == "POST":
         if request.form.get("stop"):
             bot_orchestra.stop_bot(name)
+            return redirect(url_for('bots_info', name=name))
+
         if request.form.get("start"):
             bot_orchestra.add_bot(name)
+            return redirect(url_for('bots_info', name=name))
 
-
+        config = BotConfiguration(request.form)
+        db.set_bot_live_configuration(name, config)
+        bot_orchestra.toggle_bot_config(name)
 
     bot_log = db.get_log_of_bot(name, 100)
     stat = db.get_log_of_bot_statistics(name)
@@ -467,14 +478,14 @@ def bots_info(name):
     bot_cfg = db.get_bot_config(name)
 
     return render_template("bot_info.html", **{"bot_name": name,
-                                               "bot_stat":  stat,
+                                               "bot_stat": stat,
                                                "bot_log": bot_log,
                                                "banned": banned,
                                                "worked": bot_orchestra.is_worked(name),
                                                "subs": bot_cfg.get("subs", []),
-                                               "config":bot_cfg.get("live_config"),
-                                               "ss": bot_cfg.get("ss",[]),
-                                               "friends":bot_cfg.get("frds",[])
+                                               "config": bot_cfg.get("live_config"),
+                                               "ss": bot_cfg.get("ss", []),
+                                               "friends": bot_cfg.get("frds", [])
                                                })
 
 
@@ -482,18 +493,18 @@ def bots_info(name):
 def wake_up(salt):
     return jsonify(**{"result": salt})
 
+if not test_mode:
+    spw = SubredditProcessWorker(tq, rq, db)
+    spw.daemon = True
+    spw.start()
 
-# spw = SubredditProcessWorker(tq, rq, db)
-# spw.daemon = True
-# spw.start()
-#
-# su = SubredditUpdater(tq, db)
-# su.daemon = True
-# su.start()
-#
-# pu = PostUpdater(db)
-# pu.daemon = True
-# pu.start()
+    su = SubredditUpdater(tq, db)
+    su.daemon = True
+    su.start()
+
+    pu = PostUpdater(db)
+    pu.daemon = True
+    pu.start()
 
 
 url = "http://read-shlak0bl0k.rhcloud.com"
@@ -509,6 +520,7 @@ def index():
         wu.what = _url
     else:
         return render_template("wake_up.html", **{"url": wu.what})
+
 
 
 if __name__ == '__main__':

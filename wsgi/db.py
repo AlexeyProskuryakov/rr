@@ -2,7 +2,6 @@ from datetime import datetime
 import hashlib
 
 import time
-from multiprocessing.synchronize import Lock
 
 import pymongo
 
@@ -13,8 +12,6 @@ from wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger
 __author__ = 'alesha'
 
 log = logger.getChild("DB")
-lock = Lock()
-
 
 class StatisticsCache(object):
     def __init__(self):
