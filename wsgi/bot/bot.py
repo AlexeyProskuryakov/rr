@@ -180,7 +180,7 @@ class RedditReadBot(RedditBot):
         self.queues[sub] = Queue()
 
         def f():
-            log.info("Will start find comments for [%s]"%(sub))
+            log.info("Will start find comments for [%s]" % (sub))
             for el in self.find_comment(sub):
                 self.queues[sub].put(el)
 
@@ -334,7 +334,7 @@ class RedditWriteBot(RedditBot):
     @action_function_params.setter
     def action_function_params(self, val):
         self.__action_function_params = val
-        self.counters ={A_CONSUME: 0, A_VOTE: 0, A_COMMENT: 0, A_POST: 0}
+        self.counters = {A_CONSUME: 0, A_VOTE: 0, A_COMMENT: 0, A_POST: 0}
 
     def init_work_cycle(self):
         consuming = random.randint(min_consuming, max_consuming)
@@ -346,7 +346,7 @@ class RedditWriteBot(RedditBot):
         production_voting = (prod_voting * production) / 100
         production_commenting = (prod_commenting * production) / 100
 
-        self.action_function_params  = {A_CONSUME: consuming,
+        self.action_function_params = {A_CONSUME: consuming,
                                        A_VOTE: production_voting,
                                        A_COMMENT: production_commenting}
         log.info("MY [%s] WORK CYCLE: %s" % (self.user_name, self.action_function_params))
@@ -549,20 +549,19 @@ class RedditWriteBot(RedditBot):
 
         self.register_step(A_COMMENT, info={"fullname": post_fullname, "text": comment_text, "sub": subreddit_name})
 
-    def live(self, max_iters=200, max_actions=10, **kwargs):
-        if len(self.sub_posts) == 0 or (
-                    self.last_posts_load and (
-                            self.last_posts_load - datetime.utcnow()).total_seconds() > posts_load_period()):
-            for sub in self.db.get_bot_subs(self.user_name):
-                sbrdt = self.reddit.get_subreddit(sub)
-                hot_posts = sbrdt.get_hot()
-                self.sub_posts[sub] = list(hot_posts)
-                self.last_posts_load = datetime.utcnow()
+    def live_random(self, max_iters=2000, max_actions=100, posts_limit=500, **kwargs):
+        sub_posts = {}
         counter = 0
         for x in xrange(max_iters):
-            random_sub = random.choice(self.sub_posts.keys())
-            posts = self.sub_posts.get(random_sub)
-            post = random.choice(posts)
+            random_sub = random.choice(self.db.get_bot_subs(self.user_name))
+            if random_sub in sub_posts:
+                sbrdt = self.reddit.get_subreddit(random_sub)
+                hot_posts = sbrdt.get_hot(limit=posts_limit)
+                sub_posts[random_sub] = hot_posts
+            else:
+                hot_posts = sub_posts[random_sub]
+
+            post = random.choice(hot_posts)
             if post.fullname not in self.used and self._is_want_to(7):
                 self.do_see_post(post)
                 counter += 1
@@ -601,7 +600,7 @@ class BotKapellmeister(Process):
                     if not self.w_bot.must_do(A_COMMENT):
                         try:
                             to_comment_info = queue.get_nowait()
-                            log.info("%s will do comment")
+                            log.info("%s will do comment:"%(self.bot_name))
                             self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
                         except Exception as e:
                             pass
@@ -610,9 +609,9 @@ class BotKapellmeister(Process):
                         to_comment_info = queue.get()
                         self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
 
-                    self.w_bot.live()
+                    self.w_bot.live_random()
 
-                sleep_time = random.randint(100, 3600)
+                sleep_time = random.randint(100, 60*60/2)
                 log.info("Bot [%s] will sleep %s seconds" % (self.bot_name, sleep_time))
                 time.sleep(sleep_time)
 
@@ -621,7 +620,6 @@ class BotKapellmeister(Process):
                 log.exception(e)
 
             finally:
-
                 time.sleep(10)
 
 
@@ -638,7 +636,18 @@ def synchronised(fn):
     return wrapped
 
 
+class Singleton(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
 class BotOrchestra():
+    __metaclass__ = Singleton
+
     def __init__(self):
         self.bots = {}
         self.db = DBHandler()
@@ -680,7 +689,7 @@ if __name__ == '__main__':
     bot_name = "Shlak2k15"
     bot = RedditWriteBot(db, bot_name)
 
-    bot.action_function_params = {A_CONSUME:33, A_VOTE:33, A_COMMENT:33}
+    bot.action_function_params = {A_CONSUME: 33, A_VOTE: 33, A_COMMENT: 33}
 
     for i in range(100):
         assert bot.can_do(A_CONSUME)
@@ -695,9 +704,7 @@ if __name__ == '__main__':
         bot.incr_counter(A_VOTE)
         bot.incr_counter(A_COMMENT)
 
-
-    bot.action_function_params = {A_CONSUME:33, A_VOTE:33, A_COMMENT:33}
-
+    bot.action_function_params = {A_CONSUME: 33, A_VOTE: 33, A_COMMENT: 33}
 
     assert bot.can_do(A_CONSUME)
     assert not bot.must_do(A_CONSUME)
@@ -706,7 +713,7 @@ if __name__ == '__main__':
     assert bot.can_do(A_VOTE)
     assert not bot.must_do(A_VOTE)
     bot.incr_counter(A_VOTE)
-        # bot.incr_counter(A_COMMENT)
+    # bot.incr_counter(A_COMMENT)
 
     assert bot.can_do(A_COMMENT)
     assert bot.must_do(A_COMMENT)
@@ -728,50 +735,50 @@ if __name__ == '__main__':
     assert bot.can_do(A_CONSUME)
     assert bot.must_do(A_CONSUME)
 
-        # bot_config = BotConfiguration()
-        # db.set_bot_live_configuration(bot_name, bot_config)
-        #
-        # bot = BotKapellmeister(bot_name, db, RedditReadBot(db))
-        # bot.daemon = True
-        # bot.start()
-        #
-        # time.sleep(10)
-        # bot_config = db.get_bot_live_configuration(bot_name)
-        # bot.set_config(bot_config)
+    # bot_config = BotConfiguration()
+    # db.set_bot_live_configuration(bot_name, bot_config)
+    #
+    # bot = BotKapellmeister(bot_name, db, RedditReadBot(db))
+    # bot.daemon = True
+    # bot.start()
+    #
+    # time.sleep(10)
+    # bot_config = db.get_bot_live_configuration(bot_name)
+    # bot.set_config(bot_config)
 
 
 
-        # bot = RedditWriteBot(db, "Shlak2k15")
-        # me = bot.reddit.get_me()
-        # sbrdt = bot.reddit.get_subreddit("videos")
-        # hot = list(sbrdt.get_hot())
-        # post = random.choice(hot)
-        # result = post.author.friend()
-        # print result
+    # bot = RedditWriteBot(db, "Shlak2k15")
+    # me = bot.reddit.get_me()
+    # sbrdt = bot.reddit.get_subreddit("videos")
+    # hot = list(sbrdt.get_hot())
+    # post = random.choice(hot)
+    # result = post.author.friend()
+    # print result
 
-        # BotKapellmeister("Shlak2k15", db).start()
+    # BotKapellmeister("Shlak2k15", db).start()
 
-        # bot_name2 = "Shlak2k16"
-        # orch = BotOrchestra()
-        #
-        #
-        # def test_bot(orch):
-        #     log.info("Start test bots")
-        #     bnw = orch.is_worked(bot_name)
-        #     bn2w = orch.is_worked(bot_name2)
-        #     log.info("%s worked? %s; %s worker? %s" % (bot_name, bnw, bot_name2, bn2w))
-        #     time.sleep(5)
-        #
-        #
-        # orch.add_bot(bot_name)
-        # test_bot(orch)
-        # orch.toggle_bot_config(bot_name)
-        #
-        # orch.add_bot(bot_name2)
-        # test_bot(orch)
-        #
-        # time.sleep(5 * 60)
-        # orch.stop_bot(bot_name)
-        # test_bot(orch)
-        # orch.stop_bot(bot_name2)
-        # test_bot(orch)
+    # bot_name2 = "Shlak2k16"
+    # orch = BotOrchestra()
+    #
+    #
+    # def test_bot(orch):
+    #     log.info("Start test bots")
+    #     bnw = orch.is_worked(bot_name)
+    #     bn2w = orch.is_worked(bot_name2)
+    #     log.info("%s worked? %s; %s worker? %s" % (bot_name, bnw, bot_name2, bn2w))
+    #     time.sleep(5)
+    #
+    #
+    # orch.add_bot(bot_name)
+    # test_bot(orch)
+    # orch.toggle_bot_config(bot_name)
+    #
+    # orch.add_bot(bot_name2)
+    # test_bot(orch)
+    #
+    # time.sleep(5 * 60)
+    # orch.stop_bot(bot_name)
+    # test_bot(orch)
+    # orch.stop_bot(bot_name2)
+    # test_bot(orch)
