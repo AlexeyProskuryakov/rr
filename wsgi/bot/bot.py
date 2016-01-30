@@ -38,6 +38,7 @@ S_SLEEP = "sleep"
 S_UNKNOWN = "unknown"
 
 DEFAULT_LIMIT = 100
+DEFAULT_SLEEP_TIME_AFTER_READ_SUBREDDIT = 60 * 60
 
 min_copy_count = 2
 min_comment_create_time_difference = 3600 * 24 * 10
@@ -207,6 +208,7 @@ class RedditReadBot(RedditBot):
                     self.queues[sub].put(el)
                 end = time.time()
                 log.info("Was get all comments which found for [%s] at %s seconds... Will trying next."%(sub, end-start))
+                time.sleep(DEFAULT_SLEEP_TIME_AFTER_READ_SUBREDDIT)
 
         Process(name="[%s] comment founder" % sub, target=f).start()
         return self.queues[sub]
