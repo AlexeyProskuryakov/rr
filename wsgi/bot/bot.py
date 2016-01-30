@@ -87,12 +87,10 @@ USER_AGENTS = [
 
 @net_tryings
 def check_any_login(login):
-    log.info("start request...")
     res = requests.get(
             "http://www.reddit.com/user/%s/about.json" % login,
             headers={"origin": "http://www.reddit.com",
                      "User-Agent": random.choice(USER_AGENTS)})
-    log.info("request is done!")
     if res.status_code != 200:
         return False
     if res.json().get("error", None):
@@ -116,7 +114,7 @@ class BotConfiguration(object):
             self.comments = 7
             self.comment_mwt = 5
             self.comment_vote = 8
-            self.comment_friend = 7
+            self.comment_friend = 9
             self.comment_url = 8
             self.post_vote = 6
             self.max_wait_time = 30
@@ -125,7 +123,7 @@ class BotConfiguration(object):
             self.subscribe_subreddit = 7
         elif isinstance(data, dict):
             for k, v in data.iteritems():
-                self.__dict__[k] = v
+                self.__dict__[k] = int(v)
 
     def set(self, conf_name, conf_val):
         if conf_name in self.__dict__:
@@ -192,7 +190,6 @@ class RedditReadBot(RedditBot):
         """
         super(RedditReadBot, self).__init__(user_agent)
         self.db = db
-        self.low_copies_posts = set()
         self.queues = {}
         log.info("Read bot inited!")
 
@@ -203,9 +200,13 @@ class RedditReadBot(RedditBot):
         self.queues[sub] = Queue()
 
         def f():
-            log.info("Will start find comments for [%s]" % (sub))
-            for el in self.find_comment(sub):
-                self.queues[sub].put(el)
+            while 1:
+                start = time.time()
+                log.info("Will start find comments for [%s]" % (sub))
+                for el in self.find_comment(sub):
+                    self.queues[sub].put(el)
+                end = time.time()
+                log.info("Was get all comments which found for [%s] at %s seconds... Will trying next."%(sub, end-start))
 
         Process(name="[%s] comment founder" % sub, target=f).start()
         return self.queues[sub]
@@ -224,7 +225,7 @@ class RedditReadBot(RedditBot):
         all_posts = self.get_hot_and_new(subreddit, sort=cmp_by_created_utc)
         for post in all_posts:
             # log.info("Find comments in %s"%post.fullname)
-            if post.url in self.low_copies_posts or self.db.is_post_commented(post.fullname):
+            if self.db.is_post_used(post.fullname):
                 # log.info("But post %s have low copies or commented yet"%post.fullname)
                 continue
             try:
@@ -243,17 +244,17 @@ class RedditReadBot(RedditBot):
                                 log.info("Find comment: [%s] \nin post [%s] at subreddit [%s]" % (
                                     comment, post.fullname, subreddit))
                                 break
-                            # else:
+                                # else:
                                 # log.info("But not valid comment found or authors are equals")
-                        # else:
-                            # log.info("But subreddits or fulnames are equals")
+                                # else:
+                                # log.info("But subreddits or fulnames are equals")
                     if comment:
                         yield {"post": post.fullname, "comment": comment.body}
                     else:
                         log.info("Can not find any valid comments for [%s]" % (post.fullname))
                 else:
                     # log.info("But have low copies")
-                    self.low_copies_posts.add(post.url)
+                    self.db.set_post_low_copies(post.fullname)
             except Exception as e:
                 log.error(e)
 
@@ -280,7 +281,7 @@ class RedditReadBot(RedditBot):
 
 
 class RedditWriteBot(RedditBot):
-    def __init__(self, db, login="Shlak2k15", state=None, configuration=None):
+    def __init__(self, db, login):
         """
         :param subreddits: subbreddits which this bot will comment
         :param login_credentials:  dict object with this attributes: client_id, client_secret, redirect_url, access_token, refresh_token, login and password of user and user_agent 
@@ -290,23 +291,32 @@ class RedditWriteBot(RedditBot):
         super(RedditWriteBot, self).__init__()
         self.lock = Lock()
 
-        if state is None:
-            state = {}
-        self.subscribed_subreddits = state.get("ss") or set()
-        self.friends = state.get("frds") or set()
-
         self.db = db
+
+        state = db.get_bot_config(login)
         login_credentials = db.get_bot_access_credentials(login)
+
+        self.subscribed_subreddits = set(state.get("ss")) or set()
+        self.friends = set(state.get("frds")) or set()
+
+
 
         self.init_engine(login_credentials)
         self.init_work_cycle()
 
-        log.info("Write bot inited with params \n %s" % (login_credentials))
-
         self.used = set()
-        self.sub_posts = {}
-        self.last_posts_load = None
-        self.configuration = configuration or BotConfiguration()
+        self.configuration = BotConfiguration(state.get("live_config"))
+
+        log.info("Write bot [%s] inited with credentials \n%s"
+                 "\nConfiguration: \n%s"
+                 "\nFriends: %s"
+                 "\nSubscribed breddits:%s" % (login,
+                                      "\n".join(["%s:\t%s" % (k, v) for k, v in login_credentials.get("info",{}).iteritems()]),
+                                      "\n".join(["%s:\t%s" % (k, v) for k, v in self.configuration.data.iteritems()]),
+                                      self.friends,
+                                      self.subscribed_subreddits
+                                      ))
+
 
     def init_engine(self, login_credentials):
 
@@ -400,7 +410,7 @@ class RedditWriteBot(RedditBot):
                 "frds": list(self.friends)}
 
     def persist_state(self):
-        self.db.update_bot_state(self.user_name, state=self.state)
+        self.db.update_bot_internal_state(self.user_name, state=self.state)
 
     def do_see_post(self, post):
         """
@@ -423,12 +433,12 @@ class RedditWriteBot(RedditBot):
         wt = self.wait(self.configuration.max_wait_time)
 
         if self._is_want_to(self.configuration.post_vote) and self.can_do("vote"):
-            vote_count = random.choice([1, -1])
+            post_vote_count = random.choice([1, -1])
             try:
-                post.vote(vote_count)
+                post.vote(post_vote_count)
             except Exception as e:
                 log.error(e)
-            self.register_step(A_VOTE, info={"fullname": post.fullname, "vote": vote_count})
+            self.register_step(A_VOTE, info={"fullname": post.fullname, "vote": post_vote_count})
             self.wait(self.configuration.max_wait_time / 2)
 
         if self._is_want_to(self.configuration.comments) and wt > self.configuration.comment_mwt:  # go to post comments
@@ -441,7 +451,8 @@ class RedditWriteBot(RedditBot):
                         log.error(e)
                     self.register_step(A_VOTE, info={"fullname": comment.fullname, "vote": vote_count})
                     self.wait(self.configuration.max_wait_time / 10)
-                    if self._is_want_to(self.configuration.comment_friend) and vote_count > 0:  # friend comment author
+                    if self._is_want_to(
+                            self.configuration.comment_friend) and vote_count > 0 and comment.author.name not in self.friends:  # friend comment author
                         c_author = comment.author
                         if c_author.name not in self.friends:
                             try:
@@ -449,13 +460,17 @@ class RedditWriteBot(RedditBot):
                             except Exception as e:
                                 log.error(e)
                             self.friends.add(c_author.name)
-                            self.register_step(A_FRIEND, info={"friend": c_author.name})
+                            self.register_step(A_FRIEND, info={"friend": c_author.name, "from": "comment"})
+                            log.info("%s was add friend from comment %s because want coefficient is: %s",(self.user_name, comment.fullname, self.configuration.comment_friend))
                             self.wait(self.configuration.max_wait_time / 10)
 
                 if self._is_want_to(self.configuration.comment_url):  # go to url in comment
                     if isinstance(comment, MoreComments):
                         comments = self.retrieve_comments(comment.comments(), comment.fullname, [])
-                        comment = random.choice(comments)
+                        if comments:
+                            comment = random.choice(comments)
+                        else:
+                            continue
                     urls = re_url.findall(comment.body)
                     for url in urls:
                         try:
@@ -487,7 +502,8 @@ class RedditWriteBot(RedditBot):
                 log.error(self.reddit)
 
             self.friends.add(post.author.name)
-            self.register_step(A_FRIEND, info={"fullname": post.author.name, "name": post.author.name})
+            self.register_step(A_FRIEND, info={"fullname": post.author.name, "from": "post"})
+            log.info("%s was add friend from post %s because want coefficient is: %s",(self.user_name, post.fullname, self.configuration.author_friend))
             self.wait(self.configuration.max_wait_time / 5)
 
     def set_configuration(self, configuration):
@@ -526,8 +542,7 @@ class RedditWriteBot(RedditBot):
 
                 try:
                     for comment in filter(lambda comment: isinstance(comment, MoreComments), _post.comments):
-                        etc = comment.comments()
-                        print etc
+                        comment.comments()
                         if random.randint(0, 10) > 6:
                             break
                 except Exception as e:
@@ -579,11 +594,10 @@ class BotKapellmeister(Process):
     def __init__(self, name, db, read_bot):
         super(BotKapellmeister, self).__init__()
         self.db = db
-        state = db.get_bot_state(name)
         self.bot_name = name
         self.name = name
 
-        self.w_bot = RedditWriteBot(db, login=name, state=state)
+        self.w_bot = RedditWriteBot(db, login=name)
         self.r_bot = read_bot
         self.state = S_UNKNOWN
 
@@ -598,28 +612,32 @@ class BotKapellmeister(Process):
     def bot_check(self):
         ok = check_any_login(self.bot_name)
         if not ok:
-            self.db.set_bot_live_state(self.bot_name, S_BAN)
+            self.db.set_bot_live_state(self.bot_name, S_BAN, self.pid)
         return ok
+
+    def get_bot_state(self):
+        return self.db.get_bot_live_state(self.bot_name, self.pid)
 
     def run(self):
         while 1:
             try:
                 if not self.bot_check():
                     break
-                self.state = S_WORK
+
+                self.db.set_bot_live_state(self.bot_name, S_WORK, self.pid)
                 for sub in self.db.get_bot_subs(self.bot_name):
                     queue = self.r_bot.start_retrieve_comments(sub)
                     try:
                         to_comment_info = queue.get(timeout=60)
                         self.w_bot.do_comment_post(to_comment_info.get("post"), sub, to_comment_info.get("comment"))
                     except Exception as e:
-                        log.info("can not find any comments")
+                        log.info("can not find any comments at %s" % sub)
                     self.w_bot.live_random(posts_limit=150)
 
-                self.state = S_SLEEP
-                sleep_time = random.randint(100, 60 * 60 / 2)
+                sleep_time = random.randint(1, 50)
                 log.info("Bot [%s] will sleep %s seconds" % (self.bot_name, sleep_time))
 
+                self.db.set_bot_live_state(self.bot_name, S_SLEEP, self.pid)
                 time.sleep(sleep_time)
                 self.w_bot.refresh_token()
             except Exception as e:
@@ -630,58 +648,47 @@ class BotOrchestra():
     __metaclass__ = Singleton
 
     def __init__(self):
-        self.bots = {}
+        self.__bots = {}
         self.read_bot = RedditReadBot(DBHandler())
         self.lock = Lock()
 
+    @property
+    def bots(self):
+        with self.lock:
+            return self.__bots
+
     def add_bot(self, bot_name):
         with self.lock:
-            if bot_name not in self.bots:
+            if bot_name not in self.__bots:
                 bot = BotKapellmeister(bot_name, DBHandler(), self.read_bot)
-                self.bots[bot_name] = bot
+                self.__bots[bot_name] = bot
                 bot.start()
 
-    def is_worked(self, bot_name):
+    def get_bot_state(self, bot_name):
         with self.lock:
-            result = False
-            if bot_name in self.bots:
-                result = self.bots[bot_name].state
+            result = S_UNKNOWN
+            if bot_name in self.__bots:
+                result = self.__bots[bot_name].get_bot_state()
             return result
 
     def stop_bot(self, bot_name):
         with self.lock:
-            bot = self.bots.get(bot_name)
+            bot = self.__bots.get(bot_name)
             if bot:
                 bot.terminate()
                 bot.join(1)
-                del self.bots[bot_name]
+                del self.__bots[bot_name]
 
     def toggle_bot_config(self, bot_name):
         with self.lock:
-            if bot_name in self.bots:
+            if bot_name in self.__bots:
                 def f():
                     db = DBHandler()
                     bot_config = db.get_bot_live_configuration(bot_name)
-                    self.bots[bot_name].set_config(bot_config)
+                    self.__bots[bot_name].set_config(bot_config)
 
                 Process(name="config updater", target=f).start()
 
 
 if __name__ == '__main__':
-    bot_name = "Shlak2k15"
-    bo = BotOrchestra()
-    bo.add_bot(bot_name)
-
-
-    def f():
-        bo1 = BotOrchestra()
-        print "equals? ", bo1 is bo
-        for i in range(100):
-            print "worked? ", bo1.is_worked(bot_name)
-            print "equals? ", bo1.bots is bo.bots
-            print "read queues:", bo1.read_bot.queues
-            time.sleep(10)
-
-
-    Process(target=f).start()
-    bo.bots[bot_name].join()
+    pass

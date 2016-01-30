@@ -21,14 +21,16 @@
                         <input type="submit" value="Stop bot" class="btn btn-danger btn-lg">
                     </form>
                 </div>
-                 <div class="col-md-3">
+                <div class="col-md-3">
                     <button class="btn btn-success btn-big btn-lg" onclick="window.location.reload(0);">RELOAD THIS PAGE
                     </button>
                 </div>
             </div>
             <div class="row">
                 <div class="col-md-8 col-md-offset-2">
-                    <h2>Parameters of life: <br> <small>% it is predicate: random(0,10) &gt; % </small></h2>
+                    <h2>Parameters of life: <br>
+                        <small>% it is predicate: random(0,10) &gt; %</small>
+                    </h2>
                     <form action="{{url_for('bots_info', name=bot_name)}}" method="post" class="form-horizontal">
                         <div class="form-group">
                             <label for="max_wait_time">Max wait time in any iteration</label>
@@ -86,55 +88,97 @@
         <div class="col-md-5">
             <div class="row">
                 <h1>Information of {{bot_name}}
-                    <small>(banned? {{banned}} worked? {{worked}})</small>
+                    <small>(Bot state: {{bot_live_state}})</small>
                 </h1>
-                <h3> Statistics of bot actions:</h3>
-                <table class="table table-stripped">
-                    {% for row in bot_stat %}
-                    <tr>
-                        <th>
-                            {{row.get("_id")}}
-                        </th>
-                        <th>
-                            {{row.get("count")}}
-                        </th>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
+                <div class="accordion" id="info-accordion">
+                    <div class="accordion-group">
+                        <div class="accordion-heading">
+                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#info-accordion"
+                               href="#statistic">
+                                <h3> Statistics of bot actions:</h3>
+                            </a>
+                        </div>
+                        <div id="statistic" class="accordion-body collapse">
+                            <div class="accordion-inner">
+                                <table class="table table-stripped">
+                                    {% for row in bot_stat %}
+                                    <tr>
+                                        <th>
+                                            {{row.get("_id")}}
+                                        </th>
+                                        <th>
+                                            {{row.get("count")}}
+                                        </th>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
 
-            <div class="row">
-                <h3>Subreddits:</h3>
-                <table class="table table-striped">
-                    {% for sub in subs %}
-                    <tr>
-                        <td>{{sub}}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            <div class="row">
-                <h3>Friends:</h3>
-                <table class="table table-striped">
-                    {% for friend in friends %}
-                    <tr>
-                        <td>{{friend}}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
-            <div class="row">
-                <h3>Subscribed subs:</h3>
-                <table class="table table-striped">
-                    {% for s in ss %}
-                    <tr>
-                        <td>{{s}}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
+                    <div class="accordion-group">
+                        <div class="accordion-heading">
+                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#info-accordion"
+                               href="#subs">
+                                <h3>Subreddits:</h3>
+                            </a>
+                        </div>
+                        <div id="subs" class="accordion-body collapse">
+                            <div class="accordion-inner">
+                                <table class="table table-striped">
+                                    {% for sub in subs %}
+                                    <tr>
+                                        <td>{{sub}}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-group">
+                        <div class="accordion-heading">
+                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#info-accordion"
+                               href="#friends">
+                                <h3>Friends:</h3>
+                            </a>
+                        </div>
+                        <div id="friends" class="accordion-body collapse">
+                            <div class="accordion-inner">
+                                <table class="table table-striped">
+                                    {% for friend in friends %}
+                                    <tr>
+                                        <td>{{friend}}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-group">
+                        <div class="accordion-heading">
+                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#info-accordion"
+                               href="#s_subs">
+                                <h3>Subscribed subs:</h3>
+                            </a>
+                        </div>
+                        <div id="s_subs" class="accordion-body collapse">
+                            <div class="accordion-inner">
+                                <table class="table table-striped">
+                                    {% for s in ss %}
+                                    <tr>
+                                        <td>{{s}}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
-
     </div>
     <div class="row">
         <div class="col-md-6 col-md-offset-3">
@@ -148,8 +192,11 @@
                     {{row.get("action")}}
                 </th>
                 <th class="col-md-8">
+                    {% if "permalink" in row.get("info") %}
+                    <a href="{{row.get('info')['permalink']}}">{{row.get('info').get('fullname')}}</a>
+                    {%else%}
                     {{row.get("info")}}
-
+                    {%endif%}
                 </th>
                 <th class="col-md-2">
                     {{row.get("time")}}

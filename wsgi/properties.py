@@ -65,4 +65,4 @@ time_step_less_iteration_power = 0.85
 test_mode = os.environ.get("RR_TEST", True)
 
 
-logger.info("RR MANAGEMENT SYSTEM STARTED... \nEnv:%s"%os.environ)
+logger.info("RR MANAGEMENT SYSTEM STARTED... \nEnv:%s"%"\n".join(["%s:\t%s"%(k,v) for k,v in os.environ.iteritems()]))

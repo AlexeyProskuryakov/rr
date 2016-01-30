@@ -13,6 +13,7 @@ __author__ = 'alesha'
 
 log = logger.getChild("DB")
 
+
 class StatisticsCache(object):
     def __init__(self):
         self.last_update = time.time()
@@ -67,13 +68,14 @@ class DBHandler(object):
         self.bot_log.create_index([("bot_name", pymongo.ASCENDING)])
         self.bot_log.create_index([("time", pymongo.ASCENDING)])
         self.bot_log.create_index([("action", pymongo.ASCENDING)])
-        self.bot_log.create_index([("r_id", pymongo.ASCENDING)])
 
         self.bot_config = db.get_collection("bot_config")
         self.bot_config.create_index([("user", pymongo.ASCENDING)], unique=True)
 
         self.commented_posts = db.get_collection("commented_posts")
         self.commented_posts.create_index([("fullname", pymongo.ASCENDING)], unique=True)
+        self.commented_posts.create_index([("low_copies", pymongo.ASCENDING)])
+        self.commented_posts.create_index([("time", pymongo.ASCENDING)])
 
     def update_bot_access_credentials_info(self, user, info):
         if isinstance(info.get("scope"), set):
@@ -100,19 +102,21 @@ class DBHandler(object):
         result = self.bot_config.find_one({"user": user})
         if result.get("info").get("scope"):
             result['info']['scope'] = set(result['info']['scope'])
-        return result
+        return dict(result)
 
     def set_bot_channel_id(self, name, channel_id):
         self.bot_config.update_one({"user": name}, {"$set": {"channel_id": channel_id}})
 
-    def set_bot_live_state(self, name, state):
-        self.bot_config.update_one({"user": name}, {"$set": {"live_state": state, "live_state_time":time.time()}})
+    def set_bot_live_state(self, name, state, pid):
+        self.bot_config.update_one({"user": name},
+                                   {"$set": {"live_state": state, "live_state_time": time.time(), "live_pid": pid}})
 
-    def get_bot_live_state(self, name):
+    def get_bot_live_state(self, name, pid):
         found = self.bot_config.find_one({"user": name})
         if found:
             state_time = found.get("live_state_time")
-            if not state_time or (state_time and time.time() - state_time > 3600):
+            _pid = found.get("live_pid")
+            if not state_time or (state_time and time.time() - state_time > 3600) or pid != _pid:
                 return "unknown"
             else:
                 return found.get("live_state")
@@ -122,7 +126,7 @@ class DBHandler(object):
         found = self.bot_config.find({})
         result = []
         for el in found:
-            result.append({"name": el.get("user"), "banned": el.get("banned", False)})
+            result.append({"name": el.get("user"), "state": el.get("live_state", "unknown")})
         return result
 
     def set_bot_subs(self, name, subreddits):
@@ -134,47 +138,56 @@ class DBHandler(object):
             return found.get("subs", None)
         return None
 
-    def update_bot_state(self, name, state):
+    def update_bot_internal_state(self, name, state):
         update = {}
         if state.get("ss"):
-            update["ss"] = {"$each":state['ss']}
+            update["ss"] = {"$each": state['ss']}
         if state.get("frds"):
             update["frds"] = {"$each": state['frds']}
         if update:
-            update = {"$addToSet":update}
+            update = {"$addToSet": update}
             result = self.bot_config.update_one({"user": name}, update)
 
-
-    def get_bot_state(self, name):
+    def get_bot_internal_state(self, name):
         found = self.bot_config.find_one({"user": name})
         if found:
             return {"ss": set(found.get("ss", [])),  # subscribed subreddits
                     "frds": set(found.get("friends", [])),  # friends
-                    "cp": set(found.get("cp", []))  # commented posts
                     }
 
     def set_bot_live_configuration(self, name, configuration):
-        self.bot_config.update_one({'user':name}, {"$set":{"live_config":configuration.data}})
+        self.bot_config.update_one({'user': name}, {"$set": {"live_config": configuration.data}})
 
     def get_bot_live_configuration(self, name):
-        found = self.bot_config.find_one({"user":name})
+        found = self.bot_config.find_one({"user": name})
         if found:
             live_config = found.get("live_config")
             return live_config
 
     def get_bot_config(self, name):
-        return self.bot_config.find_one({"user":name})
+        return self.bot_config.find_one({"user": name})
 
     def set_post_commented(self, post_fullname):
         found = self.commented_posts.find_one({"fullname": post_fullname})
         if not found:
-            self.commented_posts.insert_one({"fullname": post_fullname})
+            self.commented_posts.insert_one({"fullname": post_fullname, "low_copies": False})
+        else:
+            self.commented_posts.update_one({"fullname": post_fullname}, {'$unset': {"low_copies": "", "time": ""}})
 
-    def is_post_commented(self, post_fullname):
+    def is_post_used(self, post_fullname):
         found = self.commented_posts.find_one({"fullname": post_fullname})
-        return found != None
+        if found and found.get("low_copies"):
+            _time = found.get("time", 0)
+            return time.time() - _time < 3600 * 24
+        return False
 
-
+    def set_post_low_copies(self, post_fullname):
+        found = self.commented_posts.find_one({"fullname": post_fullname})
+        if not found:
+            self.commented_posts.insert_one({"fullname": post_fullname, "low_copies": True, "time": time.time()})
+        else:
+            self.commented_posts.update_one({"fullname": post_fullname},
+                                            {'$set': {"low_copies": True, "time": time.time()}})
 
     def save_log_bot_row(self, bot_name, action_name, info):
         self.bot_log.insert_one(
@@ -195,8 +208,6 @@ class DBHandler(object):
             {"$group": {"_id": "$action", "count": {"$sum": 1}}},
         ]
         return list(self.bot_log.aggregate(pipeline))
-
-
 
     def add_search_params(self, sbrdt_name, params, statistic):
         ps = self.get_search_params(sbrdt_name)
