@@ -105,14 +105,18 @@ class DBHandler(object):
     def set_bot_channel_id(self, name, channel_id):
         self.bot_config.update_one({"user": name}, {"$set": {"channel_id": channel_id}})
 
-    def is_bot_banned(self, name):
+    def set_bot_live_state(self, name, state):
+        self.bot_config.update_one({"user": name}, {"$set": {"live_state": state, "live_state_time":time.time()}})
+
+    def get_bot_live_state(self, name):
         found = self.bot_config.find_one({"user": name})
         if found:
-            return found.get("banned", False)
-        return False
-
-    def set_bot_banned(self, name):
-        self.bot_config.update_one({"user": name}, {"$set": {"banned": "true"}})
+            state_time = found.get("live_state_time")
+            if not state_time or (state_time and time.time() - state_time > 3600):
+                return "unknown"
+            else:
+                return found.get("live_state")
+        return None
 
     def get_bots_info(self):
         found = self.bot_config.find({})
