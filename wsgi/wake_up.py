@@ -29,7 +29,7 @@ class WakeUp(Process):
                     continue
                 else:
                     log.info(result.content)
-                time.sleep(3600)
+            time.sleep(3600)
 
 
 if __name__ == '__main__':
