@@ -383,115 +383,6 @@ def search_load():
     return jsonify(**{"ok": True, "name": name})
 
 
-REDIRECT_URI = "http://rr-alexeyp.rhcloud.com/authorize_callback"
-C_ID = None
-C_SECRET = None
-
-
-
-@app.route("/bot/add_credential", methods=["GET", "POST"])
-@login_required
-def bot_auth_start():
-    global C_ID
-    global C_SECRET
-
-    if request.method == "GET":
-        return render_template("bot_add_credentials.html", **{"url": False, "r_u": REDIRECT_URI})
-    if request.method == "POST":
-        C_ID = request.form.get("client_id")
-        C_SECRET = request.form.get("client_secret")
-        user = request.form.get("user")
-        pwd = request.form.get("pwd")
-
-        db.prepare_bot_access_credentials(C_ID, C_SECRET, REDIRECT_URI, user, pwd)
-
-        r = praw.Reddit("Hui")
-        r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
-        url = r.get_authorize_url("KEY",
-                                  'creddits,modcontributors,modconfig,subscribe,wikiread,wikiedit,vote,mysubreddits,submit,modlog,modposts,modflair,save,modothers,read,privatemessages,report,identity,livemanage,account,modtraffic,edit,modwiki,modself,history,flair',
-                                  refreshable=True)
-        return render_template("bot_add_credentials.html", **{"url": url, "r_u": REDIRECT_URI})
-
-
-
-@app.route("/authorize_callback")
-@login_required
-def bot_auth_end():
-    state = request.args.get('state', '')
-    code = request.args.get('code', '')
-
-    r = praw.Reddit("Hui")
-    r.set_oauth_app_info(C_ID, C_SECRET, REDIRECT_URI)
-    info = r.get_access_information(code)
-    user = r.get_me()
-    r.set_access_credentials(**info)
-    db.update_bot_access_credentials_info(user.name, info)
-    return render_template("authorize_callback.html", **{"user": user.name, "state": state, "info": info, "code": code})
-
-
-bot_orchestra = BotOrchestra()
-
-
-
-@app.route("/bots/new", methods=["POST", "GET"])
-@login_required
-def bots_new():
-    if request.method == "POST":
-        subreddits_raw = request.form.get("sbrdts")
-        subreddits = subreddits_raw.strip().split()
-
-        bot_name = request.form.get("bot-name")
-        bot_name = bot_name.strip()
-        log.info("Add subreddits: \n%s\n and bot with name: %s" % ('\n'.join([el for el in subreddits]), bot_name))
-
-        db.set_bot_subs(bot_name, subreddits)
-
-        bot_orchestra.add_bot(bot_name)
-
-        return redirect(url_for('bots_info', name=bot_name))
-
-    return render_template("bots_management.html",
-                           **{"bots": db.get_bots_info(), "worked_bots": bot_orchestra.bots.keys()})
-
-
-
-@app.route("/bots/<name>", methods=["POST", "GET"])
-@login_required
-def bots_info(name):
-    if request.method == "POST":
-        if request.form.get("stop"):
-            bot_orchestra.stop_bot(name)
-            return redirect(url_for('bots_info', name=name))
-
-        if request.form.get("start"):
-            bot_orchestra.add_bot(name)
-            return redirect(url_for('bots_info', name=name))
-
-        config = BotConfiguration(request.form)
-        db.set_bot_live_configuration(name, config)
-        bot_orchestra.toggle_bot_config(name)
-
-    bot_log = db.get_log_of_bot(name, 100)
-    stat = db.get_log_of_bot_statistics(name)
-    state = bot_orchestra.get_bot_state(name)
-
-    bot_cfg = db.get_bot_config(name)
-
-    return render_template("bot_info.html", **{"bot_name": name,
-                                               "bot_stat": stat,
-                                               "bot_log": bot_log,
-                                               "bot_live_state": state,
-                                               "subs": bot_cfg.get("subs", []),
-                                               "config": bot_cfg.get("live_config"),
-                                               "ss": bot_cfg.get("ss", []),
-                                               "friends": bot_cfg.get("frds", [])
-                                               })
-
-
-@app.route("/wake_up/<salt>", methods=["POST"])
-def wake_up(salt):
-    return jsonify(**{"result": salt})
-
 if not test_mode:
     spw = SubredditProcessWorker(tq, rq, db)
     spw.daemon = True
@@ -505,9 +396,13 @@ if not test_mode:
     pu.daemon = True
     pu.start()
 
+@app.route("/wake_up/<salt>", methods=["POST"])
+def wake_up(salt):
+    return jsonify(**{"result": salt})
 
-url = "http://read-shlak0bl0k.rhcloud.com"
-wu = WakeUp(url)
+
+urls = ["http://read-shlak0bl0k.rhcloud.com", "http://humans-shlak0bl0k.rhcloud.com"]
+wu = WakeUp(urls)
 wu.daemon = True
 wu.start()
 
@@ -515,10 +410,12 @@ wu.start()
 @app.route("/wake_up")
 def index():
     if request.method == "POST":
-        _url = request.form.get("url")
-        wu.what = _url
+        raw_urls = request.form.get("urls")
+        if isinstance(raw_urls, str):
+            urls = raw_urls.split(";")
+            wu.add_urls(urls)
     else:
-        return render_template("wake_up.html", **{"url": wu.what})
+        return render_template("wake_up.html", **{"urls": wu.what})
 
 
 
