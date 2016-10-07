@@ -7,7 +7,7 @@ import pymongo
 
 from pymongo import MongoClient
 from engine import get_interested_fields
-from rr.wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger, mongo_uri, mongo_db_name
+from wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger, mongo_uri, mongo_db_name
 
 __author__ = 'alesha'
 

@@ -6,8 +6,8 @@ import time
 
 from flask import logging
 
-from rr.wsgi.db import DBHandler
-from rr.wsgi.properties import wake_up_mongo_uri, wake_up_mongo_db_name
+from wsgi.db import DBHandler
+from wsgi.properties import wake_up_mongo_uri, wake_up_mongo_db_name
 
 log = logging.getLogger("wake_up")
 

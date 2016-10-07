@@ -11,11 +11,11 @@ from flask_login import LoginManager, login_user, login_required, logout_user
 from flask_debugtoolbar import DebugToolbarExtension
 from werkzeug.utils import redirect
 
-from rr.wsgi.db import Storage
-from rr.wsgi.engine import reddit_get_new, reddit_search, Retriever
-from rr.wsgi.processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
-from rr.wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min, test_mode
-from rr.wsgi.wake_up import WakeUp, WakeUpStorage
+from wsgi.db import Storage
+from wsgi.engine import reddit_get_new, reddit_search, Retriever
+from wsgi.processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
+from wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min, test_mode
+from wsgi.wake_up import WakeUp, WakeUpStorage
 
 __author__ = '4ikist'
 

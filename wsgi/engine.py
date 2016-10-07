@@ -5,7 +5,7 @@ import time
 import re
 import praw
 
-from rr.wsgi import properties
+from wsgi import properties
 from youtube import parse_time, to_seconds
 import youtube
 
