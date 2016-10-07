@@ -4,7 +4,8 @@ from datetime import datetime
 import time
 import re
 import praw
-from wsgi import properties
+
+from rr.wsgi import properties
 from youtube import parse_time, to_seconds
 import youtube
 

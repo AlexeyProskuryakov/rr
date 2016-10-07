@@ -26,3 +26,7 @@ table.sortable thead {
 .legend{
 	font-size: 7pt; /* Размер шрифта в пунктах */
 }
+
+.textarea{
+    width:100%;
+}

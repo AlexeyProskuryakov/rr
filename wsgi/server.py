@@ -2,24 +2,20 @@
 import re
 from datetime import datetime, timedelta
 from uuid import uuid4
-from multiprocessing import Queue
+from multiprocessing import Queue, freeze_support
 import os
-import logging
 
-import praw
 from flask import Flask, render_template, request, url_for, session, g
 from flask.json import jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user
 from flask_debugtoolbar import DebugToolbarExtension
 from werkzeug.utils import redirect
-from db import DBHandler
-from engine import reddit_get_new
-from processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
 
-from wsgi.bot.bot import BotKapellmeister, BotOrchestra, BotConfiguration
-from wsgi.engine import reddit_search, Retriever
-from wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min, test_mode
-from wsgi.wake_up import WakeUp
+from rr.wsgi.db import Storage
+from rr.wsgi.engine import reddit_get_new, reddit_search, Retriever
+from rr.wsgi.processes import SubredditProcessWorker, SubredditUpdater, PostUpdater, update_stored_posts
+from rr.wsgi.properties import SRC_SEARCH, SRC_OBSERV, logger, default_time_min, test_mode
+from rr.wsgi.wake_up import WakeUp, WakeUpStorage
 
 __author__ = '4ikist'
 
@@ -42,7 +38,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-db = DBHandler()
+db = Storage()
 
 
 class User(object):
@@ -396,29 +392,33 @@ if not test_mode:
     pu.daemon = True
     pu.start()
 
+
+    wu = WakeUp()
+    wu.daemon = True
+    wu.start()
+
+ws = WakeUpStorage('server')
+
 @app.route("/wake_up/<salt>", methods=["POST"])
 def wake_up(salt):
+    log.info("wake up from %s"%request.remote_addr)
     return jsonify(**{"result": salt})
 
 
-urls = ["http://read-shlak0bl0k.rhcloud.com", "http://humans-shlak0bl0k.rhcloud.com"]
-wu = WakeUp(urls)
-wu.daemon = True
-wu.start()
-
-
-@app.route("/wake_up")
-def index():
+@app.route("/wake_up", methods=["GET", "POST"])
+def wake_up_manage():
     if request.method == "POST":
-        raw_urls = request.form.get("urls")
-        if isinstance(raw_urls, str):
-            urls = raw_urls.split(";")
-            wu.add_urls(urls)
-    else:
-        return render_template("wake_up.html", **{"urls": wu.what})
+        urls = request.form.get("urls")
+        urls = urls.split("\n")
+        for url in urls:
+            url = url.strip()
+            if url:
+                ws.add_url(url)
 
-
+    urls = ws.get_urls()
+    return render_template("wake_up.html", **{"urls": urls})
 
 if __name__ == '__main__':
+    freeze_support()
     print os.path.dirname(__file__)
     app.run(port=65010)

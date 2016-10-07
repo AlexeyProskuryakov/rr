@@ -1,9 +1,9 @@
 # coding=utf-8
 from multiprocessing import Process
 from time import sleep
-from db import DBHandler
+from db import Storage
 from engine import Retriever, reddit_get_new, get_current_step, to_save, update_posts
-from wsgi.properties import min_update_period, min_time_step, max_time_step, logger
+from rr.wsgi.properties import min_update_period, min_time_step, max_time_step, logger
 
 __author__ = 'alesha'
 
@@ -176,6 +176,6 @@ class PostUpdater(Process):
 
 
 if __name__ == '__main__':
-    db = DBHandler()
+    db = Storage()
     pu = PostUpdater(db)
     pu.start()

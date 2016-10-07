@@ -48,6 +48,11 @@ SRC_SEARCH = "search"
 SRC_OBSERV = "observation"
 
 mongo_uri = "mongodb://alesha:sederfes100500@ds035674.mongolab.com:35674/rr"
+mongo_db_name = "rr"
+
+wake_up_mongo_uri = "mongodb://3030:sederfes100500@ds055525.mongolab.com:55525/reddit_people"
+wake_up_mongo_db_name = "reddit_people"
+
 default_time_min = "PT0H1M30S"
 
 min_update_period = 3600 * 24

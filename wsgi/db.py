@@ -7,7 +7,7 @@ import pymongo
 
 from pymongo import MongoClient
 from engine import get_interested_fields
-from wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger, mongo_uri
+from rr.wsgi.properties import SRC_SEARCH, min_time_step, min_update_period, logger, mongo_uri, mongo_db_name
 
 __author__ = 'alesha'
 
@@ -19,11 +19,17 @@ class StatisticsCache(object):
         self.last_update = time.time()
         self.data = {}
 
-
 class DBHandler(object):
-    def __init__(self):
-        log.info("start db handler %s" % mongo_uri)
-        client = MongoClient(host=mongo_uri)
+    def __init__(self, name="?", uri=mongo_uri, db_name=mongo_db_name):
+        log.info("start db handler for [%s] %s" % (name, uri))
+        self.client = MongoClient(host=uri, maxPoolSize=10, connect=False)
+        self.db = self.client[db_name]
+        self.collection_names = self.db.collection_names(include_system_collections=False)
+
+class Storage(object):
+    def __init__(self, name="?", host=mongo_uri):
+        log.info("start db handler %s %s" % (name,host))
+        client = MongoClient(host=host)
         db = client['rr']
         self.posts = db['posts']
         self.posts.create_index([("fullname", pymongo.ASCENDING)])
@@ -76,6 +82,8 @@ class DBHandler(object):
         self.commented_posts.create_index([("fullname", pymongo.ASCENDING)], unique=True)
         self.commented_posts.create_index([("low_copies", pymongo.ASCENDING)])
         self.commented_posts.create_index([("time", pymongo.ASCENDING)])
+
+        self.db = db
 
     def update_bot_access_credentials_info(self, user, info):
         if isinstance(info.get("scope"), set):
