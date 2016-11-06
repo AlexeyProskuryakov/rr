@@ -13,11 +13,29 @@
         <th>
             ups
         </th>
-        <th>
+        <th class="sorttable_numeric">
             reposts count
         </th>
         <th>
             post id (fullname)
+        </th>
+        <th class="sorttable_numeric">
+            length (secs)
+        </th>
+        <th class="sorttable_numeric">
+            yt comments
+        </th>
+        <th class="sorttable_numeric">
+            yt views
+        </th>
+        <th class="sorttable_numeric">
+            yt likes
+        </th >
+        <th class="sorttable_numeric">
+            yt dislikes
+        </th>
+        <th class="sorttable_numeric">
+            yt favorites
         </th>
     </tr>
     </thead>
@@ -27,7 +45,7 @@
         <th>
             <a href="{{post['video_url']}}" target="_blank"> {{ post['video_id'] }}</a>
         </th>
-        <th>
+        <th class="col-md-3">
             <a href="{{post['reddit_url']}}" target="_blank">{{ post['title'] }}</a>
         </th>
         <th sorttable_customkey="{{post['created_utc']}}">
@@ -41,6 +59,24 @@
         </th>
         <th sorttable_customkey="{{post['fullname']}}">
             {{post['fullname']}}
+        </th>
+        <th sorttable_customkey="{{post.get('video_length')}}">
+            {{post.get('video_length')}}
+        </th>
+        <th sorttable_customkey="{{post['yt_comments']}}">
+            {{post['yt_comments']}}
+        </th>
+        <th sorttable_customkey="{{post['yt_likes']}}">
+            {{post['yt_views']}}
+        </th>
+        <th sorttable_customkey="{{post['yt_comments']}}">
+            {{post['yt_likes']}}
+        </th>
+        <th sorttable_customkey="{{post['yt_dislikes']}}">
+            {{post['yt_dislikes']}}
+        </th>
+        <th sorttable_customkey="{{post['yt_favorites']}}">
+            {{post['yt_favorites']}}
         </th>
         <th>
             <btn onclick=post_change("{{post['fullname']}}","{{post['video_id']}}","update")

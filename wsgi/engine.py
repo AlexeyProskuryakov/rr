@@ -1,3 +1,4 @@
+import copy
 from functools import partial
 
 from datetime import datetime
@@ -6,6 +7,7 @@ import re
 import praw
 
 from wsgi import properties
+from wsgi.sub_connections import SCStorage
 from youtube import parse_time, to_seconds
 import youtube
 
@@ -14,13 +16,6 @@ log = properties.logger.getChild("engine")
 reddit = praw.Reddit(user_agent="foo")
 
 log.info("reddit is connected")
-
-
-def get_interested_fields(source, fields):
-    result = {}
-    for field in fields:
-        result[field] = source.get(field)
-    return result
 
 
 def retrieve_video_id(url):
@@ -48,23 +43,30 @@ def to_show(el):
 
 
 def to_save(post):
-    return {"video_id": post.get("video_id"),
-            "video_url": post.get("url") or post.get("video_url"),
-            "title": post.get("title"),
-            "ups": post.get("ups"),
-            "reddit_url": post.get("permalink") or post.get("reddit_url"),
-            "subreddit": post.get("subreddit"),
-            "fullname": post.get("fullname"),
-            "reposts_count": post.get("reposts_count"),
-            "created_dt": datetime.fromtimestamp(post.get("created_utc")),
-            "created_utc": post.get("created_utc"),
-            "comments_count": post.get("num_comments")
-            }
+    result = {"video_id": post.get("video_id"),
+              "video_url": post.get("url") or post.get("video_url"),
+              "title": post.get("title"),
+              "ups": post.get("ups"),
+              "reddit_url": post.get("permalink") or post.get("reddit_url"),
+              "subreddit": post.get("subreddit"),
+              "fullname": post.get("fullname"),
+              "reposts_count": post.get("reposts_count"),
+              "created_dt": datetime.fromtimestamp(post.get("created_utc")),
+              "created_utc": post.get("created_utc"),
+              "comments_count": post.get("num_comments"),
+              "video_length": post.get("video_length"),
+              }
+
+    for k, v in dict(post).iteritems():
+        if "yt_" in k:
+            result[k] = v
+
+    return result
 
 
 def net_tryings(fn):
     def wrapped(*args, **kwargs):
-        count = 0
+        count = 1
         while 1:
             try:
                 result = fn(*args, **kwargs)
@@ -74,7 +76,7 @@ def net_tryings(fn):
                 log.warning("can not load data for [%s]\n args: %s, kwargs: %s \n because %s" % (fn, args, kwargs, e))
                 if count >= properties.tryings_count:
                     raise e
-                time.sleep(properties.step_time_after_trying)
+                time.sleep(properties.step_time_after_trying * count)
                 count += 1
 
     return wrapped
@@ -90,16 +92,23 @@ def reddit_get_new(subreddit_name):
     return result
 
 
+sc_store = SCStorage()
+
+
 @net_tryings
-def get_reposts_count(video_id):
+def get_reposts_count(video_id, s1):
     count = 0
-    for _ in reddit.search("url:\'%s\'" % video_id):
-        count += 1
+    for el in list(reddit.search("url:\'%s\'" % video_id)):
+        s2 = el.subreddit.display_name
+        if s1 != s2:
+            sc_store.add_connection(s1, s2, video_id)
+            count += 1
+
     return count
 
 
 @net_tryings
-def reddit_search(query, count = MAX_COUNT):
+def reddit_search(query, count=MAX_COUNT):
     result = []
     for post in reddit.search(query, limit=count, count=count):
         post_info = to_save(to_show(post))
@@ -147,25 +156,24 @@ class Retriever(object):
         param_val = self.sbrdt_statistic.get(name_param, 0)
         self.sbrdt_statistic[name_param] = param_val + 1
 
-    def process_post(self, post, rp_max, ups_min, ups_max, time_min):
+    def process_post(self, post, reposts_max, rate_min, rate_max, time_min):
         add_stat = partial(self._add_statistic_inc, post.get("subreddit"))
         ups_count = int(post.get("ups"))
-        if ups_count >= ups_min:
-            if ups_count <= ups_max:
+        if ups_count >= rate_min:
+            if ups_count <= rate_max:
                 video_id = post.get("video_id")
                 if video_id:
-                    if time_min and to_seconds(parse_time(time_min)):
-                        time_min_seconds = to_seconds(parse_time(time_min))
-                        video_time = youtube.get_time(video_id)
-                        if video_time and to_seconds(video_time) > time_min_seconds:
-                            post["time"] = video_time
-                        else:
-                            add_stat("little_time")
-                            return
+                    time_min_seconds = to_seconds(parse_time(time_min))
+                    video_info = youtube.get_video_info(video_id)
+                    if video_info and video_info['video_length'] > time_min_seconds:
+                        post = dict(dict(post), **video_info)
+                    else:
+                        add_stat("little_time")
+                        return
 
                     try:
-                        repost_count = get_reposts_count(video_id)
-                        if repost_count <= rp_max:
+                        repost_count = get_reposts_count(video_id, post.get("subreddit"))
+                        if repost_count <= reposts_max:
                             post["reposts_count"] = repost_count
                             return post
                         else:
@@ -201,21 +209,20 @@ class Retriever(object):
         :param params:
         :return:
         """
-        time_min = params.get('time_min', None) or properties.default_time_min
         if not posts:
             log.error("no posts")
             return
 
+        params['time_min'] = params.get('time_min', properties.default_time_min)
+        _params = copy.copy(params)
+        del params['lrtime']
+
         for post in posts:
-            post = self.process_post(post,
-                                     params.get('reposts_max'),
-                                     params.get('rate_min'),
-                                     params.get('rate_max'),
-                                     time_min)
+            post = self.process_post(post, **_params)
             if post is not None:
                 yield to_save(post)
 
 
 if __name__ == '__main__':
-    result = update_post(["t3_3p5q1r", "t3_3p69uw"])
+    result = update_post(["t3_3p5q1r".encode("utf8"), "t3_3p69uw".encode("utf8")])
     print result

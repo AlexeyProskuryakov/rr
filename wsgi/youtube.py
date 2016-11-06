@@ -6,18 +6,17 @@ import re
 
 duration_reg = re.compile(u"PT((?P<hours>\d+)H)?((?P<minutes>\d+)M)?((?P<seconds>\d+)S)?")
 
-
-# Set DEVELOPER_KEY to the API key value from the APIs & auth > Registered apps
-# tab of
-#   https://cloud.google.com/console
-# Please ensure that you have enabled the YouTube Data API for your project.
-DEVELOPER_KEY = "AIzaSyCYF4GPkVpdYjZ5RpDaSMcbpRpfkavnUzc"
+DEVELOPER_KEY = "AIzaSyALPCgnpIM6KcJsilUsi1VxO5A7xgLujPQ"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
+
+youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
+                developerKey=DEVELOPER_KEY)
 
 to_seconds = lambda x: 3600 * int(x['hours'] or 0) + \
                        60 * int(x['minutes'] or 0) + \
                        int(x['seconds'] or 0)
+
 
 def parse_time(duration_str):
     for d in duration_reg.finditer(duration_str):
@@ -27,10 +26,6 @@ def parse_time(duration_str):
 
 
 def get_time(video_id):
-    youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
-                    developerKey=DEVELOPER_KEY)
-
-    # Call the videos.list method to retrieve location details for each video.
     video_response = youtube.videos().list(
         id=video_id,
         part='contentDetails'
@@ -45,9 +40,27 @@ def get_time(video_id):
     return None
 
 
+def get_video_info(video_id):
+    video_response = youtube.videos().list(
+        id=video_id,
+        part='statistics,contentDetails'
+    ).execute()
+    for video_result in video_response.get("items", []):
+        duration_str = video_result["contentDetails"]["duration"]
+        statistic_data = video_result["statistics"]
+        video_length = parse_time(duration_str)
+        if video_length and statistic_data:
+            return {"yt_comments": int(statistic_data.get('commentCount', 0)),
+                    "yt_likes": int(statistic_data.get('likeCount', 0)),
+                    "yt_dislikes": int(statistic_data.get('dislikeCount', 0)),
+                    "yt_views": int(statistic_data.get('viewCount', 0)),
+                    "yt_favorites": int(statistic_data.get('favoriteCount', 0)),
+                    "video_length": to_seconds(video_length)
+                    }
+
+    return None
+
 
 if __name__ == '__main__':
-    result = get_time("9O5jf3CWTiA")
-    print parse_time("PT0H1M12S")
-    print parse_time("pt0h1m12s")
+    result = get_video_info("9O5jf3CWTiA")
     print result

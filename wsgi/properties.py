@@ -59,7 +59,7 @@ min_update_period = 3600 * 24
 min_time_step = 10
 max_time_step = 3600 * 5
 
-step_time_after_trying = 60
+step_time_after_trying = 1
 tryings_count = 10
 
 time_step_less_iteration_power = 0.85

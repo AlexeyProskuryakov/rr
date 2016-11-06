@@ -14,7 +14,7 @@ log = logging.getLogger("wake_up")
 
 class WakeUpStorage(DBHandler):
     def __init__(self, name="?"):
-        super(WakeUpStorage, self).__init__(name=name, uri=wake_up_mongo_uri, db_name=wake_up_mongo_db_name)
+        super(WakeUpStorage, self).__init__(name="wu %s"%name, uri=wake_up_mongo_uri, db_name=wake_up_mongo_db_name)
         collections = self.db.collection_names(include_system_collections=False)
         if "wake_up" not in collections:
             self.urls = self.db.create_collection("wake_up")

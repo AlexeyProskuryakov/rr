@@ -38,8 +38,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-db = Storage()
-
+db = Storage("server")
 
 class User(object):
     def __init__(self, name, pwd):

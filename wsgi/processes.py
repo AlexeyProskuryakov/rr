@@ -148,11 +148,8 @@ def update_stored_posts(db, posts):
         sbrdt_params = subreddits.get(post.get("subreddit"))
         if sbrdt_params:
             retriever = Retriever()
-            processed_post = retriever.process_post(post,
-                                                    sbrdt_params.get("reposts_max"),
-                                                    sbrdt_params.get("rate_min"),
-                                                    sbrdt_params.get("rate_max"),
-                                                    None)
+            del sbrdt_params['lrtime']
+            processed_post = retriever.process_post(post, **sbrdt_params)
             if processed_post:
                 db.update_post(to_save(processed_post))
             else:
@@ -173,9 +170,3 @@ class PostUpdater(Process):
                 log.info("will update %s posts...", count)
                 update_stored_posts(self.db, for_update)
             sleep(min_update_period)
-
-
-if __name__ == '__main__':
-    db = Storage()
-    pu = PostUpdater(db)
-    pu.start()
