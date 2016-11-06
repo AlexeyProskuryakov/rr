@@ -212,7 +212,7 @@ def info_subreddit(name):
 @login_required
 def del_post(fullname, video_id):
     db.delete_post(fullname, video_id)
-    return jsonify(**{"ok": True})
+    return jsonify(**{"ok": True, "updated":{"deleted":True}})
 
 
 @app.route("/post/update/<fullname>/<video_id>", methods=["GET"])

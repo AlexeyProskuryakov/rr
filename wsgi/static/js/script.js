@@ -15,6 +15,12 @@ var post_change = function(fn, v_id, meth){
 			console.log(result);
 			if (result['ok'] == true){
 				el = $("#"+fn+"-"+v_id);
+
+				if (result.updated.deleted){
+				    el.addClass("more-opacity");
+				    return;
+				}
+
 				el.children(".ups").text(result.updated.ups);
 				el.children(".reposts").text(result.updated.reposts_count);
 				el.children(".yt-comments").text(result.updated.yt_comments);
@@ -22,9 +28,7 @@ var post_change = function(fn, v_id, meth){
 				el.children(".yt-views").text(result.updated.yt_views);
 				el.children(".yt-dislikes").text(result.updated.yt_dislikes);
 				el.children(".yt-favorites").text(result.updated.yt_favorites);
-				if (result.updated.deleted){
-				    el.addClass("more-opacity");
-				}
+                el.append("<th>Updated!</th>")
 			}
 		}
 	);
