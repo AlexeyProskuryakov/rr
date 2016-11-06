@@ -2,6 +2,9 @@
     <thead>
     <tr>
         <th>
+            fn
+        </th>
+        <th>
             id
         </th>
         <th>
@@ -15,9 +18,6 @@
         </th>
         <th class="sorttable_numeric">
             reposts count
-        </th>
-        <th>
-            post id (fullname)
         </th>
         <th class="sorttable_numeric">
             length (secs)
@@ -41,7 +41,10 @@
     </thead>
     <tbody>
     {% for post in posts %}
-    <tr>
+    <tr id="{{post['fullname']}}-{{post['video_id']}}">
+        <th sorttable_customkey="{{post['fullname']}}">
+            {{post['fullname']}}
+        </th>
         <th>
             <a href="{{post['video_url']}}" target="_blank"> {{ post['video_id'] }}</a>
         </th>
@@ -51,31 +54,28 @@
         <th sorttable_customkey="{{post['created_utc']}}">
             {{post['created_dt']}}
         </th>
-        <th sorttable_customkey="{{post['ups']}}">
+        <th sorttable_customkey="{{post['ups']}}" class="ups">
             {{post['ups']}}
         </th>
-        <th sorttable_customkey="{{post['reposts_count']}}">
+        <th sorttable_customkey="{{post['reposts_count']}}" class="reposts">
             {{post['reposts_count']}}
-        </th>
-        <th sorttable_customkey="{{post['fullname']}}">
-            {{post['fullname']}}
         </th>
         <th sorttable_customkey="{{post.get('video_length')}}">
             {{post.get('video_length')}}
         </th>
-        <th sorttable_customkey="{{post['yt_comments']}}">
+        <th sorttable_customkey="{{post['yt_comments']}}" class="yt-comments">
             {{post['yt_comments']}}
         </th>
-        <th sorttable_customkey="{{post['yt_likes']}}">
+        <th sorttable_customkey="{{post['yt_likes']}}" class="yt-likes">
             {{post['yt_views']}}
         </th>
-        <th sorttable_customkey="{{post['yt_comments']}}">
+        <th sorttable_customkey="{{post['yt_views']}}" class="yt-views">
             {{post['yt_likes']}}
         </th>
-        <th sorttable_customkey="{{post['yt_dislikes']}}">
+        <th sorttable_customkey="{{post['yt_dislikes']}}" class="yt-dislikes">
             {{post['yt_dislikes']}}
         </th>
-        <th sorttable_customkey="{{post['yt_favorites']}}">
+        <th sorttable_customkey="{{post['yt_favorites']}}" class="yt-favorites">
             {{post['yt_favorites']}}
         </th>
         <th>

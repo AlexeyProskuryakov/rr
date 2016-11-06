@@ -40,6 +40,7 @@ login_manager.login_view = 'login'
 
 db = Storage("server")
 
+
 class User(object):
     def __init__(self, name, pwd):
         self.id = str(uuid4().get_hex())
@@ -204,7 +205,7 @@ def info_subreddit(name):
     sbrdt_info = db.get_subreddists_statistic()[name]
     return render_template("subbredit_info.html", **{"username": user.name,
                                                      "posts": posts,
-                                                     "el": sbrdt_info,})
+                                                     "el": sbrdt_info, })
 
 
 @app.route("/post/del/<fullname>/<video_id>", methods=["GET"])
@@ -220,7 +221,8 @@ def update_post(fullname, video_id):
     found = db.get_post(fullname, video_id)
     if found:
         update_stored_posts(db, [found])
-        return jsonify(**{"ok": True})
+        found = db.get_post(fullname, video_id)
+        return jsonify(**{"ok": True, "updated": found})
     return jsonify(**{"ok": False, "detail": "Post %s %s not found" % (fullname, video_id)})
 
 
@@ -254,8 +256,8 @@ def get_chart_data(name):
 
     all = filter(lambda x: x.get("video_id") is not None, all)
     all = filter(
-            lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"),
-            all)
+        lambda x: x.get("ups") >= sbrdt_params.get("rate_min") and x.get("ups") <= sbrdt_params.get("rate_max"),
+        all)
     all = filter(lambda x: x.get("fullname") not in loaded_fns, all)
 
     search = db.get_posts_of_subreddit(name, SRC_SEARCH)
@@ -353,12 +355,12 @@ def search_load():
         log.info("Start search: %s" % query)
         posts = reddit_search(query)
         posts = filter(
-                lambda x: (before - x.get("created_dt")).total_seconds() > 0 and x.get("video_id") not in video_ids,
-                posts)
+            lambda x: (before - x.get("created_dt")).total_seconds() > 0 and x.get("video_id") not in video_ids,
+            posts)
         cur_v_ids = set(map(lambda x: x.get("video_id"), posts))
         difference = cur_v_ids.difference(video_ids)
         difference = filter(
-                lambda x: not db.is_post_video_id_present(x), difference
+            lambda x: not db.is_post_video_id_present(x), difference
         )
 
         log.info("New posts: %s" % len(difference))
@@ -391,16 +393,16 @@ if not test_mode:
     pu.daemon = True
     pu.start()
 
-
     wu = WakeUp()
     wu.daemon = True
     wu.start()
 
 ws = WakeUpStorage('server')
 
+
 @app.route("/wake_up/<salt>", methods=["POST"])
 def wake_up(salt):
-    log.info("wake up from %s"%request.remote_addr)
+    log.info("wake up from %s" % request.remote_addr)
     return jsonify(**{"result": salt})
 
 
@@ -416,6 +418,7 @@ def wake_up_manage():
 
     urls = ws.get_urls()
     return render_template("wake_up.html", **{"urls": urls})
+
 
 if __name__ == '__main__':
     freeze_support()

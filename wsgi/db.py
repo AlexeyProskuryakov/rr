@@ -19,6 +19,7 @@ class StatisticsCache(object):
         self.last_update = time.time()
         self.data = {}
 
+
 class DBHandler(object):
     def __init__(self, name="?", uri=mongo_uri, db_name=mongo_db_name):
         log.info("start db handler for [%s] %s" % (name, uri))
@@ -26,9 +27,10 @@ class DBHandler(object):
         self.db = self.client[db_name]
         self.collection_names = self.db.collection_names(include_system_collections=False)
 
+
 class Storage(object):
     def __init__(self, name="?", host=mongo_uri):
-        log.info("start db handler %s %s" % (name,host))
+        log.info("start db handler %s %s" % (name, host))
         client = MongoClient(host=host)
         db = client['rr']
         self.posts = db['posts']
@@ -57,18 +59,18 @@ class Storage(object):
 
         self.cache = {}
         self.statistics = db.get_collection("statistics") or db.create_collection(
-                'statistics',
-                capped=True,
-                size=1024 * 1024 * 2,  # required
+            'statistics',
+            capped=True,
+            size=1024 * 1024 * 2,  # required
         )
 
         self.statistics.create_index([("time", pymongo.ASCENDING)])
         self.statistics.create_index([("type", pymongo.ASCENDING)])
 
         self.bot_log = db.get_collection("bot_log") or db.create_collection(
-                "bot_log",
-                capped=True,
-                size=1024 * 1024 * 256,
+            "bot_log",
+            capped=True,
+            size=1024 * 1024 * 256,
         )
 
         self.bot_log.create_index([("bot_name", pymongo.ASCENDING)])
@@ -94,12 +96,12 @@ class Storage(object):
         found = self.bot_config.find_one({"user": user})
         if not found:
             self.bot_config.insert_one(
-                    {"client_id": client_id,
-                     "client_secret": client_secret,
-                     "redirect_uri": redirect_uri,
-                     "user": user,
-                     "pwd": pwd
-                     })
+                {"client_id": client_id,
+                 "client_secret": client_secret,
+                 "redirect_uri": redirect_uri,
+                 "user": user,
+                 "pwd": pwd
+                 })
         else:
             self.bot_config.update_one({"user": user}, {"$set": {"client_id": client_id,
                                                                  "client_secret": client_secret,
@@ -199,10 +201,10 @@ class Storage(object):
 
     def save_log_bot_row(self, bot_name, action_name, info):
         self.bot_log.insert_one(
-                {"bot_name": bot_name,
-                 "action": action_name,
-                 "time": datetime.utcnow(),
-                 "info": info})
+            {"bot_name": bot_name,
+             "action": action_name,
+             "time": datetime.utcnow(),
+             "info": info})
 
     def get_log_of_bot(self, bot_name, limit=None):
         res = self.bot_log.find({"bot_name": bot_name}).sort("time", pymongo.DESCENDING)
@@ -289,8 +291,9 @@ class Storage(object):
             post['updated'] = time.time()
             self.posts.insert_one(post)
 
-    def get_post(self, fullname, video_id):
-        found = self.posts.find_one({"fullname": fullname, "video_id": video_id})
+    def get_post(self, fullname, video_id, projection=None):
+        found = self.posts.find_one({"fullname": fullname, "video_id": video_id},
+                                    projection={"_id": False} if not projection else projection)
         return found
 
     def is_post_present(self, post_full_name):
@@ -317,8 +320,8 @@ class Storage(object):
 
     def get_posts_for_update(self, min_update_period=min_update_period):
         found = self.posts.find(
-                {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}],
-                 "deleted": {"$exists": False}})
+            {"$or": [{"updated": {"$lt": time.time() - min_update_period}}, {"updated": {"$exists": False}}],
+             "deleted": {"$exists": False}})
         return found
 
     def get_posts_of_subreddit(self, name, source=None):
