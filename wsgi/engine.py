@@ -96,12 +96,23 @@ sc_store = SCStorage()
 
 
 @net_tryings
-def get_reposts_count(video_id, s1):
+def get_reposts_count(url_identity, post):
+    """
+
+    :param url_identity:
+    :param post: post from db or dict with subreddit and created_utc
+    :return:
+    """
     count = 0
-    for el in list(reddit.search("url:\'%s\'" % video_id)):
+    s1 = post.get("subreddit")
+    for el in list(reddit.search("url:\'%s\'" % url_identity)):
         s2 = el.subreddit.display_name
+        created2 = el.created_utc
         if s1 != s2:
-            sc_store.add_connection(s1, s2, video_id)
+            if post.get("created_utc") > created2:
+                sc_store.add_connection(s1, s2, on=url_identity, ct="rt")
+            else:
+                sc_store.add_connection(s2, s1, on=url_identity, ct="rt")
             count += 1
 
     return count
@@ -172,7 +183,7 @@ class Retriever(object):
                         return
 
                     try:
-                        repost_count = get_reposts_count(video_id, post.get("subreddit"))
+                        repost_count = get_reposts_count(video_id, post)
                         if repost_count <= reposts_max:
                             post["reposts_count"] = repost_count
                             return post
