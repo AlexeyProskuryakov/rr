@@ -1,14 +1,16 @@
 import logging
 from Queue import Empty
-from multiprocessing.pool import ThreadPool
+from multiprocessing import Process, Event
+from multiprocessing import Queue as mQ
 
-from threading import Thread, Event
-from Queue import Queue
+from threading import Thread
+from Queue import Queue as Q
 from time import sleep
 
 import praw
 
 from wsgi.engine import get_reposts_count
+from wsgi.scripts import GET_USER_AGENT_R
 from wsgi.scripts.subinfo_elements import Users, RelationalElements, all_elements
 from wsgi.scripts.utils import comments_sequence
 from wsgi.sub_connections import SCStorage
@@ -18,7 +20,7 @@ log = logging.getLogger("sub_info_agg")
 CMNT = "comment"
 ATHR = "author"
 
-r = praw.Reddit(user_agent="Test alesha")
+r = praw.Reddit(user_agent=GET_USER_AGENT_R())
 
 sc_store = SCStorage()
 
@@ -42,7 +44,7 @@ def get_sub_users(sub_name, uq):
 
     for subm in hot:
         if sc_store.is_contains(subm.fullname):
-            log.info("% is contains" % subm.fullname)
+            log.info("%s is contains" % subm.fullname)
             continue
 
         if fsbm is None:
@@ -69,7 +71,8 @@ def get_sub_users(sub_name, uq):
     sc_store.set_sub_info(sub_name, {"speed": sub_speed})
 
 
-def get_subs_from_users(users_queue, sub_queue, event, reddit=praw.Reddit(user_agent="Test alesha load users")):
+def get_subs_from_users(users_queue, sub_queue, event):
+    reddit = praw.Reddit(user_agent=GET_USER_AGENT_R())
     while 1:
         user_name = qget(users_queue)
         if not user_name:
@@ -78,7 +81,7 @@ def get_subs_from_users(users_queue, sub_queue, event, reddit=praw.Reddit(user_a
         if sc_store.is_contains(user_name):
             log.info("%s is contains")
             continue
-
+        log.info("Start load subs from comments and posts of %s" % user_name)
         user = reddit.get_redditor(user_name)
         us = RelationalElements()
         c_subs = set(map(lambda x: x.subreddit.display_name, user.get_comments()))
@@ -87,16 +90,15 @@ def get_subs_from_users(users_queue, sub_queue, event, reddit=praw.Reddit(user_a
 
         us.add_groups(u_subs, user_name)
 
-        sub_queue.put(us)
-        log.info("Loaded subs (%s) of %s" % (len(u_subs), user_name))
+        sub_queue.put(dict(us))
+        log.info("\tloaded %s subs of %s" % (len(u_subs), user_name))
         sc_store.u_add(user_name)
 
     event.clear()
 
 
 def generate_subs(users):
-    q_in, q_out = Queue(len(users)), Queue(len(users))
-
+    q_in, q_out = mQ(len(users)), mQ(len(users))
     for u in users:
         q_in.put(u)
 
@@ -104,8 +106,8 @@ def generate_subs(users):
     for _ in range(8):
         e = Event()
         e.set()
-        t = Thread(target=get_subs_from_users, args=(q_in, q_out, e))
-        t.setDaemon(True)
+        t = Process(target=get_subs_from_users, args=(q_in, q_out, e))
+        t.daemon = True
         t.start()
         te.append(e)
 
@@ -116,6 +118,7 @@ def generate_subs(users):
                 if e.is_set():
                     continue
             break
+        result = RelationalElements.create(result)
         yield result
 
 
@@ -135,7 +138,7 @@ def qget(q):
 
 
 def load_sub_users_and_reposts_connections(sub):
-    users_queue = Queue(500)
+    users_queue = Q(500)
     p = Thread(target=get_sub_users, args=(sub, users_queue))
     p.daemon = True
     p.start()

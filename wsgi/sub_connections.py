@@ -56,4 +56,4 @@ class SCStorage(DBHandler):
         self.r_users.update_one({"name":u}, {"$set":{"name":u}}, upsert=True)
 
     def is_contains(self, u):
-        self.r_users.find_one({"name":u})
+        return self.r_users.find_one({"name":u})

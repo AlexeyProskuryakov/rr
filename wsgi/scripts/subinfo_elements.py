@@ -11,6 +11,14 @@ class RelationalElements(defaultdict):
         result = super(RelationalElements, cls).__new__(cls)
         return result
 
+    @staticmethod
+    def create(dict):
+        re = RelationalElements()
+        for k,v in dict.iteritems():
+            re[k] = v
+        return re
+
+
     def __init__(self):
         super(RelationalElements, self).__init__(set)
         self[all_elements] = set()
